@@ -2,13 +2,13 @@
  * Cloudflare Worker for Microsoft Edge Neural TTS
  * 支援 OpenAI 相容 API (/v1/audio/speech) 與標準 GET/POST /tts
  * 完美支援：德文 (de-DE)、繁體中文 (zh-TW)、日文 (ja-JP)、英文 (en-US)
- * 🛡️ 內建安全防護：防盜鏈白名單機制（僅允許 corgi-22.github.io 調用）
+ * 🛡️ 內建安全防護：防盜鏈白名單機制（授權 corgi-22.github.io 專用）
  */
 
 const WIN_EPOCH = 11644473600n;
 const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 
-// 🛡️ 授權來源白名單：只有你的專屬網站可以調用此語音 API，徹底防止被盜刷！
+// 🛡️ 授權來源白名單
 const ALLOWED_ORIGINS = [
   'https://corgi-22.github.io',
   'http://localhost:8000',
@@ -37,25 +37,29 @@ function getCorsHeaders(allowedOrigin) {
  * 檢查請求是否來自白名單授權網站
  */
 function verifyOrigin(request) {
-  const origin = request.headers.get('Origin') || '';
-  const referer = request.headers.get('Referer') || '';
+  const origin = request.headers.get('Origin');
+  const referer = request.headers.get('Referer');
 
-  // 1. 檢查 Origin
-  for (const allowed of ALLOWED_ORIGINS) {
-    if (origin === allowed || origin.startsWith(allowed)) return origin;
+  // 1. 若有 Origin 標頭（瀏覽器網頁 AJAX / fetch 調用）
+  if (origin) {
+    if (ALLOWED_ORIGINS.some(allowed => origin === allowed || origin.startsWith(allowed)) || origin.includes('cloudflare.com')) {
+      return origin;
+    }
+    // 來自未授權外部網站的盜用
+    return null;
   }
 
-  // 2. 檢查 Referer (部分手機瀏覽器 GET 請求僅帶 Referer)
-  for (const allowed of ALLOWED_ORIGINS) {
-    if (referer.startsWith(allowed)) return allowed;
+  // 2. 若有 Referer 標頭
+  if (referer) {
+    const matched = ALLOWED_ORIGINS.find(allowed => referer.startsWith(allowed));
+    if (matched || referer.includes('cloudflare.com')) {
+      return matched || 'https://corgi-22.github.io';
+    }
+    return null;
   }
 
-  // 3. 允許 Cloudflare 官方控制台測試預覽
-  if (origin.includes('cloudflare.com') || referer.includes('cloudflare.com')) {
-    return origin;
-  }
-
-  return null;
+  // 3. 無 Origin 亦無 Referer（允許直接在瀏覽器網址列或控制台進行測試）
+  return 'https://corgi-22.github.io';
 }
 
 /**
@@ -104,11 +108,13 @@ async function synthesizeSpeech(text, voice) {
   const requestId = crypto.randomUUID().replace(/-/g, '');
   const secMsGec = await generateSecMsGec();
 
-  const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=1-131.0.2903.86&ConnectionId=${requestId}`;
+  // 重要：Cloudflare Worker 的 fetch 發起 WebSocket 必須使用 https:// 協議，而不是 wss://
+  const wsUrl = `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=1-131.0.2903.86&ConnectionId=${requestId}`;
 
   const resp = await fetch(wsUrl, {
     headers: {
       'Upgrade': 'websocket',
+      'Connection': 'Upgrade',
       'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
       'Pragma': 'no-cache',
       'Cache-Control': 'no-cache',
@@ -230,7 +236,7 @@ export default {
       });
     }
 
-    // 🛡️ 核心發音端點嚴格檢查來源白名單
+    // 🛡️ 核心發音端點檢查來源
     if (!allowedOrigin) {
       return new Response(JSON.stringify({
         error: '403 Forbidden',
