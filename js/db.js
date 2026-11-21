@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'AppleAnkiLocalDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 class Database {
   constructor() {
@@ -36,6 +36,11 @@ class Database {
         // 設定表
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
+        }
+
+        // 高品質語音音訊快取表 (MP3 Blobs)
+        if (!db.objectStoreNames.contains('audioCache')) {
+          db.createObjectStore('audioCache', { keyPath: 'key' });
         }
       };
 
@@ -221,6 +226,67 @@ class Database {
       const req = store.delete(Number(cardId));
       req.onsuccess = () => resolve(true);
       req.onerror = () => reject(req.error);
+    });
+  }
+
+  // --- 高品質語音快取操作 (支援離線播放與 0 延遲) ---
+  async getAudio(key) {
+    await this.init();
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction('audioCache', 'readonly');
+        const store = tx.objectStore('audioCache');
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
+  async saveAudio(key, blob) {
+    await this.init();
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction('audioCache', 'readwrite');
+        const store = tx.objectStore('audioCache');
+        const req = store.put({ key, blob, createdAt: Date.now() });
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  async getAudioCacheCount() {
+    await this.init();
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction('audioCache', 'readonly');
+        const store = tx.objectStore('audioCache');
+        const req = store.count();
+        req.onsuccess = () => resolve(req.result || 0);
+        req.onerror = () => resolve(0);
+      } catch (e) {
+        resolve(0);
+      }
+    });
+  }
+
+  async clearAudioCache() {
+    await this.init();
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction('audioCache', 'readwrite');
+        const store = tx.objectStore('audioCache');
+        store.clear();
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
     });
   }
 

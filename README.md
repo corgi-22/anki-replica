@@ -16,11 +16,17 @@
    - **Tinder 式滑動手勢**：左滑標記「重來」、右滑標記「良好」。
    - **拇指熱區按鈕**：底部 54px 高度的大按鈕（重來、困難、良好、簡單），單手好握好按。
    - **觸覺震動回饋**：點擊與滑動觸發微震動（Haptic Feedback）。
-   - **內建真人發音（TTS）**：日語、英語自動識別朗讀，背單字免下載音檔。
-3. **解決 GitHub Pages 資料儲存問題**：
-   - **本機持久化**：採用瀏覽器原生 `IndexedDB`，支援離線儲存數萬張卡片。
+   - **德語名詞三大性別色彩標記**：`der` (藍)、`die` (紅)、`das` (綠) 自動變色。
+3. **高品質廣播級語音（微軟 Edge Neural + Cloudflare Worker）**：
+   - 德語：`de-DE-KatjaNeural`（純正母語發音、咬字極清晰）
+   - 繁體中文：`zh-TW-HsiaoChenNeural`（正宗台灣國語曉臻腔）
+   - 日語：`ja-JP-NanamiNeural`（七海音色，高低音音調 Pitch Accent 優秀）
+   - **IndexedDB 永久離線快取**：聽過一次的單字自動儲存至本機，下次複習 0 流量秒播。
+   - **斷網自動備援**：離線或未設定 Worker 時自動降級為原生語音，確保背單字不中斷。
+4. **解決 GitHub Pages 資料儲存問題**：
+   - **本機持久化**：採用瀏覽器原生 `IndexedDB`，支援離線儲存數萬張卡片與音訊。
    - **一鍵 JSON 匯出與還原**：一鍵將牌組與學習進度打包下載為 `.json` 備份，換手機或跨瀏覽器一秒無損還原。
-4. **零依賴、零建置步驟（Zero-Build）**：
+5. **零依賴、零建置步驟（Zero-Build）**：
    - 純標準現代 Web 技術（Vanilla ES6 Modules + CSS3 + HTML5）。
    - 不需安裝 Node.js，不需 npm build，推上 GitHub Pages 立即上線。
 

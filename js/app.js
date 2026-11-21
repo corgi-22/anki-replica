@@ -411,14 +411,62 @@ class AnkiApp {
   async renderSettingsView() {
     const decks = await db.getAllDecks();
     const cards = await db.getAllCards();
+    const audioCacheCount = await db.getAudioCacheCount();
+    const savedWorkerUrl = localStorage.getItem('tts-worker-url') || '';
+    const savedEngine = localStorage.getItem('tts-engine') || 'edge';
+
     const main = document.getElementById('app-main');
 
     main.innerHTML = `
       <div style="padding-top: 8px;">
-        <h1 class="ios-large-title">設定與備份</h1>
+        <h1 class="ios-large-title">設定與語音</h1>
         <p style="color: var(--label-secondary); font-size: 14px; margin-bottom: 20px;">
-          完全解決靜態網站無伺服器儲存問題：支援一鍵本機 JSON 匯出與無損還原。
+          個人化系統偏好、資料備份與微軟廣播級高品質神經網路語音設定。
         </p>
+
+        <!-- 高品質語音引擎區塊 (方案 1: Cloudflare Edge TTS) -->
+        <div class="ios-group-title">🎙️ 高品質語音發音 (微軟 Edge Neural)</div>
+        <div class="ios-group-card">
+          <div class="ios-cell">
+            <div>
+              <div style="font-weight: 600;">發音引擎</div>
+              <div style="font-size: 12px; color: var(--label-secondary);">微軟母語神經網路 (德語Katja/繁中曉臻/日語七海)</div>
+            </div>
+            <select id="tts-engine-select" class="ios-input" style="width: auto; padding: 6px 12px; font-size: 13px;">
+              <option value="edge" ${savedEngine === 'edge' ? 'selected' : ''}>微軟神經網路 (推薦)</option>
+              <option value="native" ${savedEngine === 'native' ? 'selected' : ''}>原生 WebSpeech</option>
+            </select>
+          </div>
+
+          <div style="padding: 14px 16px; border-bottom: 0.5px solid var(--separator);">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">Cloudflare Worker 代理網址</div>
+            <input id="input-worker-url" class="ios-input" placeholder="例如: https://my-anki-tts.workers.dev" value="${this.escapeHtml(savedWorkerUrl)}" style="font-size: 14px; padding: 10px;" />
+            <div style="font-size: 11px; color: var(--label-secondary); margin-top: 6px; line-height: 1.4;">
+              💡 參閱專案目錄下的 <code>cloudflare-worker/README.md</code>，只需 1 分鐘免費貼上部署。未設定時會自動使用原生發音備援。
+            </div>
+          </div>
+
+          <!-- 語音測試按鈕 -->
+          <div style="padding: 12px 16px; border-bottom: 0.5px solid var(--separator); background: var(--card-elevated);">
+            <div style="font-size: 12px; font-weight: 600; color: var(--label-secondary); margin-bottom: 8px;">即時測試發音效果：</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="btn-test-de" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇩🇪 測試德語</button>
+              <button id="btn-test-zh" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇹🇼 測試繁中</button>
+              <button id="btn-test-ja" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇯🇵 測試日語</button>
+            </div>
+          </div>
+
+          <div class="ios-cell">
+            <div>
+              <div style="font-weight: 600;">離線音訊快取</div>
+              <div style="font-size: 12px; color: var(--label-secondary);">已聽過的單字永久快取於本機，離線 0 流量秒播</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="cache-count-label" style="font-weight: 600; color: var(--accent-blue);">${audioCacheCount} 個</span>
+              <button id="btn-clear-audio-cache" style="background: none; border: none; color: var(--color-again); font-size: 12px; cursor: pointer; padding: 4px;">清空</button>
+            </div>
+          </div>
+        </div>
 
         <div class="ios-group-title">儲存狀態與統計</div>
         <div class="ios-group-card">
@@ -483,6 +531,37 @@ class AnkiApp {
         </div>
       </div>
     `;
+
+    // 語音設定監聽
+    const workerUrlInput = document.getElementById('input-worker-url');
+    workerUrlInput?.addEventListener('input', (e) => {
+      localStorage.setItem('tts-worker-url', e.target.value.trim());
+    });
+
+    const engineSelect = document.getElementById('tts-engine-select');
+    engineSelect?.addEventListener('change', (e) => {
+      localStorage.setItem('tts-engine', e.target.value);
+    });
+
+    // 語音測試按鈕
+    document.getElementById('btn-test-de')?.addEventListener('click', () => {
+      speakText('Guten Tag! Wie geht es Ihnen heute?', 'de-DE');
+    });
+    document.getElementById('btn-test-zh')?.addEventListener('click', () => {
+      speakText('你好！歡迎使用間隔重複記憶閃卡。', 'zh-TW');
+    });
+    document.getElementById('btn-test-ja')?.addEventListener('click', () => {
+      speakText('こんにちは！今日も楽しく勉強しましょう。', 'ja-JP');
+    });
+
+    // 清空語音快取
+    document.getElementById('btn-clear-audio-cache')?.addEventListener('click', async () => {
+      if (confirm('確定要清空已快取的本機音訊嗎？')) {
+        await db.clearAudioCache();
+        document.getElementById('cache-count-label').textContent = '0 個';
+        alert('語音快取已清空。');
+      }
+    });
 
     // 匯出 JSON
     document.getElementById('btn-export-json')?.addEventListener('click', async () => {
