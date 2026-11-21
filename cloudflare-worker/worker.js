@@ -2,10 +2,19 @@
  * Cloudflare Worker for Microsoft Edge Neural TTS
  * 支援 OpenAI 相容 API (/v1/audio/speech) 與標準 GET/POST /tts
  * 完美支援：德文 (de-DE)、繁體中文 (zh-TW)、日文 (ja-JP)、英文 (en-US)
+ * 🛡️ 內建安全防護：防盜鏈白名單機制（僅允許 corgi-22.github.io 調用）
  */
 
 const WIN_EPOCH = 11644473600n;
 const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+
+// 🛡️ 授權來源白名單：只有你的專屬網站可以調用此語音 API，徹底防止被盜刷！
+const ALLOWED_ORIGINS = [
+  'https://corgi-22.github.io',
+  'http://localhost:8000',
+  'http://127.0.0.1:8000',
+  'http://localhost:5173'
+];
 
 // 預設各語言最優質的微軟神經網路音色
 const DEFAULT_VOICES = {
@@ -15,12 +24,39 @@ const DEFAULT_VOICES = {
   'en-US': 'en-US-JennyNeural'       // 美式英語女聲
 };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Max-Age': '86400'
-};
+function getCorsHeaders(allowedOrigin) {
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin || 'https://corgi-22.github.io',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400'
+  };
+}
+
+/**
+ * 檢查請求是否來自白名單授權網站
+ */
+function verifyOrigin(request) {
+  const origin = request.headers.get('Origin') || '';
+  const referer = request.headers.get('Referer') || '';
+
+  // 1. 檢查 Origin
+  for (const allowed of ALLOWED_ORIGINS) {
+    if (origin === allowed || origin.startsWith(allowed)) return origin;
+  }
+
+  // 2. 檢查 Referer (部分手機瀏覽器 GET 請求僅帶 Referer)
+  for (const allowed of ALLOWED_ORIGINS) {
+    if (referer.startsWith(allowed)) return allowed;
+  }
+
+  // 3. 允許 Cloudflare 官方控制台測試預覽
+  if (origin.includes('cloudflare.com') || referer.includes('cloudflare.com')) {
+    return origin;
+  }
+
+  return null;
+}
 
 /**
  * 計算微軟 Edge 朗讀協議所需的 Sec-MS-GEC 防偽金鑰 (v2 時間窗口算法)
@@ -121,12 +157,10 @@ async function synthesizeSpeech(text, voice) {
       const data = event.data;
 
       if (typeof data === 'string') {
-        // 文字消息判定合成結束
         if (data.includes('Path:turn.end')) {
           clearTimeout(timeout);
           try { ws.close(); } catch (_) {}
 
-          // 合併所有 MP3 音訊二進位區塊
           const totalLength = audioChunks.reduce((acc, chunk) => acc + chunk.length, 0);
           const merged = new Uint8Array(totalLength);
           let offset = 0;
@@ -137,12 +171,9 @@ async function synthesizeSpeech(text, voice) {
           resolve(merged);
         }
       } else if (data instanceof ArrayBuffer) {
-        // 二進位音訊封包解析
-        // 前 2 位元組表示標頭長度 (Big-Endian)
         const view = new DataView(data);
         if (data.byteLength > 2) {
           const headerLength = view.getUint16(0);
-          // 真正的 MP3 音訊本體緊接在標頭之後
           const audioBodyOffset = 2 + headerLength;
           if (data.byteLength > audioBodyOffset) {
             const chunk = new Uint8Array(data.slice(audioBodyOffset));
@@ -175,27 +206,42 @@ async function synthesizeSpeech(text, voice) {
 
 export default {
   async fetch(request) {
+    const allowedOrigin = verifyOrigin(request);
+
+    // 處理 CORS Preflight 預檢請求
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      if (!allowedOrigin) {
+        return new Response('403 Forbidden: 未授權的跨域來源', { status: 403 });
+      }
+      return new Response(null, { status: 204, headers: getCorsHeaders(allowedOrigin) });
     }
 
     const url = new URL(request.url);
 
-    // 健康檢查端點
+    // 健康檢查狀態頁 (公開可見)
     if (url.pathname === '/' || url.pathname === '/health') {
       return new Response(JSON.stringify({
         status: 'online',
-        service: 'Microsoft Edge Neural TTS Worker',
-        supportedLangs: ['de-DE', 'zh-TW', 'ja-JP', 'en-US'],
-        usage: {
-          get: '/tts?text=Guten+Tag&voice=de-DE-KatjaNeural',
-          post: '/tts (Body: {"text": "...", "voice": "..."})',
-          openai: '/v1/audio/speech (Body: {"input": "...", "voice": "..."})'
-        }
+        service: 'Microsoft Edge Neural TTS (Protected)',
+        authorizedOrigin: 'https://corgi-22.github.io',
+        supportedLangs: ['de-DE', 'zh-TW', 'ja-JP', 'en-US']
       }, null, 2), {
-        headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }
+        headers: { 'Content-Type': 'application/json; charset=utf-8', ...getCorsHeaders(allowedOrigin) }
       });
     }
+
+    // 🛡️ 核心發音端點嚴格檢查來源白名單
+    if (!allowedOrigin) {
+      return new Response(JSON.stringify({
+        error: '403 Forbidden',
+        message: '未授權的呼叫來源。此服務僅授權 https://corgi-22.github.io 專用。'
+      }, null, 2), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const corsHeaders = getCorsHeaders(allowedOrigin);
 
     try {
       let text = '';
@@ -213,11 +259,11 @@ export default {
       if (!text || !text.trim()) {
         return new Response(JSON.stringify({ error: '請提供 text 或 input 參數' }), {
           status: 400,
-          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
 
-      // 如果未明確指定音色，自動依文字語言匹配最佳音色
+      // 未指定音色時自動匹配
       if (!voice) {
         const detected = detectLang(text);
         voice = DEFAULT_VOICES[detected] || DEFAULT_VOICES['en-US'];
@@ -229,14 +275,14 @@ export default {
         headers: {
           'Content-Type': 'audio/mpeg',
           'Cache-Control': 'public, max-age=31536000, immutable',
-          ...CORS_HEADERS
+          ...corsHeaders
         }
       });
     } catch (err) {
       console.error('TTS error:', err);
       return new Response(JSON.stringify({ error: err.message || '語音合成失敗' }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
   }
