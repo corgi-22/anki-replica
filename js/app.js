@@ -210,50 +210,52 @@ class AnkiApp {
 
         <!-- 3D 卡片結構 -->
         <div class="card-scene">
-          <div class="card-flipper" id="study-flipper">
-            <!-- 卡片正面 (題目) -->
-            <div class="card-face front">
-              <div class="badge-stamp badge-again">重來 AGAIN</div>
-              <div class="badge-stamp badge-good">良好 GOOD</div>
+          <div class="card-drag-wrapper" id="study-drag-wrapper">
+            <div class="card-flipper" id="study-flipper">
+              <!-- 卡片正面 (題目) -->
+              <div class="card-face front">
+                <div class="badge-stamp badge-again">重來 AGAIN</div>
+                <div class="badge-stamp badge-good">良好 GOOD</div>
 
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--accent-blue); letter-spacing: 0.5px;">QUESTION (正面)</span>
-                <button id="btn-speak-front" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 4px;">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                </button>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--accent-blue); letter-spacing: 0.5px;">QUESTION (正面)</span>
+                  <button id="btn-speak-front" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 4px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px;">
+                  <div style="font-size: 30px; font-weight: 700; line-height: 1.35; white-space: pre-wrap;">${this.formatRuby(card.front)}</div>
+                  ${card.hint ? `<div style="margin-top: 14px; font-size: 13px; color: var(--label-secondary);">💡 提示：${this.escapeHtml(card.hint)}</div>` : ''}
+                </div>
+
+                <div style="text-align: center; font-size: 12px; color: var(--label-tertiary);">
+                  👆 輕觸卡片翻面 · 左右滑動快速評分
+                </div>
               </div>
 
-              <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px;">
-                <div style="font-size: 30px; font-weight: 700; line-height: 1.35; white-space: pre-wrap;">${this.formatRuby(card.front)}</div>
-                ${card.hint ? `<div style="margin-top: 14px; font-size: 13px; color: var(--label-secondary);">💡 提示：${this.escapeHtml(card.hint)}</div>` : ''}
-              </div>
+              <!-- 卡片背面 (答案與詳解) -->
+              <div class="card-face back">
+                <div class="badge-stamp badge-again">重來 AGAIN</div>
+                <div class="badge-stamp badge-good">良好 GOOD</div>
 
-              <div style="text-align: center; font-size: 12px; color: var(--label-tertiary);">
-                👆 輕觸卡片翻面 · 左右滑動快速評分
-              </div>
-            </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--color-good); letter-spacing: 0.5px;">ANSWER (解答)</span>
+                  <button id="btn-speak-back" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 4px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                  </button>
+                </div>
 
-            <!-- 卡片背面 (答案與詳解) -->
-            <div class="card-face back">
-              <div class="badge-stamp badge-again">重來 AGAIN</div>
-              <div class="badge-stamp badge-good">良好 GOOD</div>
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px;">
+                  <div style="font-size: 26px; font-weight: 700; color: var(--color-good); line-height: 1.3; white-space: pre-wrap;">${this.escapeHtml(card.back)}</div>
+                  ${card.hint ? `<div style="margin-top: 14px; font-size: 13px; color: var(--label-secondary); background: var(--card-elevated); padding: 8px 14px; border-radius: 12px;">${this.escapeHtml(card.hint)}</div>` : ''}
+                </div>
 
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--color-good); letter-spacing: 0.5px;">ANSWER (解答)</span>
-                <button id="btn-speak-back" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 4px;">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                </button>
-              </div>
-
-              <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px;">
-                <div style="font-size: 26px; font-weight: 700; color: var(--color-good); line-height: 1.3; white-space: pre-wrap;">${this.escapeHtml(card.back)}</div>
-                ${card.hint ? `<div style="margin-top: 14px; font-size: 13px; color: var(--label-secondary); background: var(--card-elevated); padding: 8px 14px; border-radius: 12px;">${this.escapeHtml(card.hint)}</div>` : ''}
-              </div>
-
-              <div style="display: flex; justify-content: space-around; font-size: 11px; color: var(--label-secondary); border-top: 0.5px solid var(--separator); padding-top: 10px;">
-                <span>間隔: ${card.interval || 0}天</span>
-                <span>連續次數: ${card.repetitions || 0}</span>
-                <span>難度係數: ${card.easeFactor || 2.5}</span>
+                <div style="display: flex; justify-content: space-around; font-size: 11px; color: var(--label-secondary); border-top: 0.5px solid var(--separator); padding-top: 10px;">
+                  <span>間隔: ${card.interval || 0}天</span>
+                  <span>連續次數: ${card.repetitions || 0}</span>
+                  <span>難度係數: ${card.easeFactor || 2.5}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -284,13 +286,22 @@ class AnkiApp {
     `;
 
     const flipper = document.getElementById('study-flipper');
+    const dragWrapper = document.getElementById('study-drag-wrapper');
 
-    // 綁定手勢與點擊翻面
-    attachCardGestures(flipper, {
-      onFlip: () => {
-        this.isFlipped = !this.isFlipped;
-        flipper.classList.toggle('is-flipped', this.isFlipped);
-      },
+    const toggleFlip = () => {
+      this.isFlipped = !this.isFlipped;
+      flipper.classList.toggle('is-flipped', this.isFlipped);
+      triggerHaptic(15);
+    };
+
+    // 點擊卡片任何地方（除發音按鈕外）精準觸發 3D 翻面
+    flipper.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      toggleFlip();
+    });
+
+    // 綁定滑動手勢於外層容器，左右拖曳評分
+    attachCardGestures(dragWrapper, {
       onSwipeLeft: () => this.handleRateCard(Rating.AGAIN),
       onSwipeRight: () => this.handleRateCard(Rating.GOOD)
     });

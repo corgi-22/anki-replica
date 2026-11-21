@@ -195,6 +195,15 @@ body {
   position: relative;
 }
 
+/* 拖曳手勢位移外層容器 */
+.card-drag-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
 .card-flipper {
   width: 100%;
   height: 100%;
@@ -203,10 +212,11 @@ body {
   transition: transform 0.45s cubic-bezier(0.3, 0.9, 0.3, 1);
   border-radius: 24px;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
 }
 
 .card-flipper.is-flipped {
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) !important;
 }
 
 .card-face {
@@ -225,6 +235,7 @@ body {
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   box-sizing: border-box;
+  user-select: none;
 }
 
 .card-face.back {
