@@ -1,0 +1,376 @@
+/* Apple Native iOS Human Interface Guidelines 視覺樣式表 */
+
+:root {
+  --system-bg: #F2F2F7;
+  --card-bg: #FFFFFF;
+  --card-elevated: #F8F8FA;
+  --label-primary: #000000;
+  --label-secondary: #8E8E93;
+  --label-tertiary: #C7C7CC;
+  --separator: #E5E5EA;
+  --nav-bg: rgba(242, 242, 247, 0.85);
+  --tab-bg: rgba(255, 255, 255, 0.88);
+  --accent-blue: #007AFF;
+  --color-again: #FF3B30;
+  --color-hard: #FF9500;
+  --color-good: #34C759;
+  --color-easy: #007AFF;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+[data-theme="dark"] {
+  --system-bg: #000000;
+  --card-bg: #1C1C1E;
+  --card-elevated: #2C2C2E;
+  --label-primary: #FFFFFF;
+  --label-secondary: #98989D;
+  --label-tertiary: #48484A;
+  --separator: #38383A;
+  --nav-bg: rgba(20, 20, 22, 0.85);
+  --tab-bg: rgba(28, 28, 30, 0.88);
+  --accent-blue: #0A84FF;
+  --color-again: #FF453A;
+  --color-hard: #FF9F0A;
+  --color-good: #30D158;
+  --color-easy: #0A84FF;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --system-bg: #000000;
+    --card-bg: #1C1C1E;
+    --card-elevated: #2C2C2E;
+    --label-primary: #FFFFFF;
+    --label-secondary: #98989D;
+    --label-tertiary: #48484A;
+    --separator: #38383A;
+    --nav-bg: rgba(20, 20, 22, 0.85);
+    --tab-bg: rgba(28, 28, 30, 0.88);
+    --accent-blue: #0A84FF;
+    --color-again: #FF453A;
+    --color-hard: #FF9F0A;
+    --color-good: #30D158;
+    --color-easy: #0A84FF;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang TC", "Hiragino Sans", "Segoe UI", Roboto, sans-serif;
+  background-color: var(--system-bg);
+  color: var(--label-primary);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 頂部與底部毛玻璃 */
+.frosted-glass-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding-top: calc(var(--safe-top) + 8px);
+  padding-bottom: 12px;
+  padding-left: 16px;
+  padding-right: 16px;
+  background-color: var(--nav-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 0.5px solid var(--separator);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.frosted-glass-tabs {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding-top: 10px;
+  padding-bottom: calc(var(--safe-bottom) + 8px);
+  background-color: var(--tab-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid var(--separator);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+/* 內容滾動區塊 */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: calc(var(--safe-top) + 60px);
+  padding-bottom: calc(var(--safe-bottom) + 75px);
+  padding-left: 16px;
+  padding-right: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* iOS 常用分組表格風格 (Inset Grouped) */
+.ios-group-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  color: var(--label-secondary);
+  margin-left: 16px;
+  margin-bottom: 6px;
+  margin-top: 20px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+}
+
+.ios-group-card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ios-cell {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 0.5px solid var(--separator);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ios-cell:last-child {
+  border-bottom: none;
+}
+
+.ios-cell:active {
+  background-color: var(--separator);
+}
+
+/* iOS Tab 按鈕 */
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.tab-item.active {
+  color: var(--accent-blue);
+}
+
+.tab-item svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.2;
+}
+
+/* 3D 翻轉卡片容器 */
+.card-scene {
+  perspective: 1200px;
+  width: 100%;
+  max-width: 420px;
+  height: 52vh;
+  min-height: 320px;
+  max-height: 460px;
+  margin: 12px auto;
+  position: relative;
+}
+
+.card-flipper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.3, 0.9, 0.3, 1);
+  border-radius: 24px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-flipper.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 24px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--separator);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-sizing: border-box;
+}
+
+.card-face.back {
+  transform: rotateY(180deg);
+}
+
+/* 滑動徽章提示 (Tinder-style) */
+.badge-stamp {
+  position: absolute;
+  top: 24px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: 2.5px solid;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.15s ease;
+}
+
+.badge-again {
+  left: 20px;
+  color: var(--color-again);
+  border-color: var(--color-again);
+  transform: rotate(-15deg);
+}
+
+.badge-good {
+  right: 20px;
+  color: var(--color-good);
+  border-color: var(--color-good);
+  transform: rotate(15deg);
+}
+
+/* 底部拇指評分按鈕群 */
+.rating-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 0 4px;
+}
+
+.btn-rating {
+  height: 54px;
+  border: none;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  color: #FFFFFF;
+  font-weight: 600;
+  transition: transform 0.1s ease, filter 0.15s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.btn-rating:active {
+  transform: scale(0.94);
+  filter: brightness(0.9);
+}
+
+.btn-again { background-color: var(--color-again); }
+.btn-hard { background-color: var(--color-hard); }
+.btn-good { background-color: var(--color-good); }
+.btn-easy { background-color: var(--color-easy); }
+
+.btn-rating .sub-label {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* 原生 iOS 大標題 */
+.ios-large-title {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+
+/* 輸入框 */
+.ios-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--separator);
+  background-color: var(--card-bg);
+  color: var(--label-primary);
+  font-size: 16px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.ios-input:focus {
+  border-color: var(--accent-blue);
+}
+
+/* 膠囊按鈕 */
+.btn-pill {
+  padding: 12px 20px;
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  background-color: var(--accent-blue);
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+}
+
+.btn-pill:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background-color: var(--card-elevated);
+  color: var(--label-primary);
+  border: 1px solid var(--separator);
+}
+
+/* 進度條 */
+.progress-container {
+  width: 100%;
+  height: 6px;
+  background-color: var(--separator);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: var(--accent-blue);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}

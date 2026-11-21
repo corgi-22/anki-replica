@@ -1,0 +1,22 @@
+{
+  "name": "Anki Mobile - 間隔重複閃卡",
+  "short_name": "Anki",
+  "description": "極簡純淨、符合 Apple HIG 行動端手勢操作的間隔重複學習工具",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#007AFF",
+  "icons": [
+    {
+      "src": "icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
