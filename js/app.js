@@ -1,6 +1,7 @@
 /**
  * app.js - 主應用程式控制核心
  * 協調整合：IndexedDB 資料庫、SM-2 間隔重複、手勢物理拖曳、語音發音與 iOS 視圖路由
+ * 完整支援：牌組管理、卡片瀏覽與即時編輯修改/刪除、廣播級微軟 Edge TTS
  */
 
 import { db } from './db.js';
@@ -26,9 +27,10 @@ class AnkiApp {
   }
 
   // --- 視圖路由切換 ---
-  switchView(viewName, deck = null) {
+  switchView(viewName, payload = null) {
     this.currentView = viewName;
-    if (deck) this.activeDeck = deck;
+    if (viewName === 'study' && payload) this.activeDeck = payload;
+    if (viewName === 'deck-detail' && payload) this.activeDeck = payload;
 
     // 更新導航欄狀態
     document.querySelectorAll('.tab-item').forEach(tab => {
@@ -42,11 +44,14 @@ class AnkiApp {
       case 'decks':
         this.renderDecksView();
         break;
+      case 'deck-detail':
+        this.renderDeckDetailView(payload || this.activeDeck);
+        break;
       case 'study':
         this.startStudySession(this.activeDeck);
         break;
       case 'add':
-        this.renderAddCardView();
+        this.renderCardEditor(null, 'decks');
         break;
       case 'settings':
         this.renderSettingsView();
@@ -88,7 +93,7 @@ class AnkiApp {
           <div style="font-size: 12px; opacity: 0.9;">遵循艾賓浩斯遺忘曲線，每天 10 分鐘形成長期記憶</div>
         </div>
 
-        <div class="ios-group-title">牌組列表 (${deckStats.length})</div>
+        <div class="ios-group-title">牌組列表 (${deckStats.length} 個 · 點擊查看卡片與複習)</div>
         <div class="ios-group-card">
           ${deckStats.length === 0 ? `
             <div style="padding: 32px 16px; text-align: center; color: var(--label-secondary);">
@@ -123,13 +128,13 @@ class AnkiApp {
       </div>
     `;
 
-    // 點擊牌組進入複習
+    // 點擊牌組進入牌組詳細頁（可查看所有卡片、編輯卡片、開始複習）
     document.querySelectorAll('.deck-item-row').forEach(row => {
       row.addEventListener('click', () => {
         const deckId = Number(row.dataset.id);
         const deck = decks.find(d => d.id === deckId);
         triggerHaptic(15);
-        this.switchView('study', deck);
+        this.renderDeckDetailView(deck);
       });
     });
 
@@ -140,7 +145,7 @@ class AnkiApp {
   }
 
   async promptAddDeck() {
-    const title = prompt('請輸入新牌組名稱 (例如: 多益高頻詞彙 / 日檢N2):');
+    const title = prompt('請輸入新牌組名稱 (例如: 多益高頻詞彙 / 日檢N2 / 德語A2):');
     if (!title || !title.trim()) return;
 
     const desc = prompt('請輸入牌組備註/說明 (可略過):') || '';
@@ -149,7 +154,111 @@ class AnkiApp {
     this.renderDecksView();
   }
 
-  // --- 2. 卡片複習視圖 (Study View) ---
+  // --- 2. 牌組詳細頁 (Deck Detail & Card Manager) ---
+  async renderDeckDetailView(deck) {
+    if (!deck) {
+      this.renderDecksView();
+      return;
+    }
+    this.activeDeck = deck;
+    const cards = await db.getCardsByDeck(deck.id);
+    const dueCards = cards.filter(c => isCardDue(c));
+    const main = document.getElementById('app-main');
+
+    main.innerHTML = `
+      <div style="padding-top: 8px;">
+        <!-- 頂部返回導航 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <button id="btn-back-to-decks" style="background: none; border: none; color: var(--accent-blue); font-size: 16px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 4px 0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            我的牌組
+          </button>
+          <button id="btn-delete-deck" style="background: none; border: none; color: var(--color-again); font-size: 14px; cursor: pointer; padding: 4px;">
+            刪除牌組
+          </button>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <h1 class="ios-large-title">${this.escapeHtml(deck.title)}</h1>
+          ${deck.description ? `<p style="color: var(--label-secondary); font-size: 14px; margin-top: -4px;">${this.escapeHtml(deck.description)}</p>` : ''}
+        </div>
+
+        <!-- 動作按鈕群 -->
+        <div style="display: flex; gap: 10px; margin-bottom: 24px;">
+          <button id="btn-start-study-now" class="btn-pill" style="flex: 1; height: 50px; font-size: 16px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            開始複習 (${dueCards.length})
+          </button>
+          <button id="btn-add-card-to-deck" class="btn-pill btn-secondary" style="height: 50px; padding: 0 16px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            新增卡片
+          </button>
+        </div>
+
+        <div class="ios-group-title">牌組所有卡片 (${cards.length} 張 · 點擊編輯卡片)</div>
+        <div class="ios-group-card">
+          ${cards.length === 0 ? `
+            <div style="padding: 32px 16px; text-align: center; color: var(--label-secondary);">
+              此牌組尚無卡片，點擊上方「新增卡片」開始製作吧！
+            </div>
+          ` : cards.map(c => `
+            <div class="ios-cell card-item-row" data-id="${c.id}">
+              <div style="flex: 1; min-width: 0; padding-right: 12px;">
+                <div style="font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  ${this.escapeHtml(c.front.replace(/\[.*?\]/g, '').split('\n')[0])}
+                </div>
+                <div style="font-size: 13px; color: var(--label-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  ${this.escapeHtml(c.back)}
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                <span style="font-size: 11px; color: var(--label-secondary); background: var(--card-elevated); padding: 2px 8px; border-radius: 8px; font-weight: 500;">
+                  ${c.interval ? `${c.interval}天` : '新卡'}
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="var(--label-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-back-to-decks')?.addEventListener('click', () => {
+      triggerHaptic(10);
+      this.switchView('decks');
+    });
+
+    document.getElementById('btn-start-study-now')?.addEventListener('click', () => {
+      triggerHaptic(15);
+      this.switchView('study', deck);
+    });
+
+    document.getElementById('btn-add-card-to-deck')?.addEventListener('click', () => {
+      triggerHaptic(15);
+      this.renderCardEditor(null, 'deck-detail', { deck });
+    });
+
+    document.getElementById('btn-delete-deck')?.addEventListener('click', async () => {
+      if (confirm(`確定要刪除「${deck.title}」及其所有卡片嗎？此動作無法復原！`)) {
+        await db.deleteDeck(deck.id);
+        triggerHaptic(20);
+        alert('牌組已刪除。');
+        this.switchView('decks');
+      }
+    });
+
+    // 點擊卡片列表開啟編輯
+    document.querySelectorAll('.card-item-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const cardId = Number(row.dataset.id);
+        const card = cards.find(c => c.id === cardId);
+        triggerHaptic(15);
+        this.renderCardEditor(card, 'deck-detail', { deck });
+      });
+    });
+  }
+
+  // --- 3. 卡片複習視圖 (Study View) ---
   async startStudySession(deck) {
     if (!deck) {
       this.renderDecksView();
@@ -157,7 +266,6 @@ class AnkiApp {
     }
 
     const cards = await db.getCardsByDeck(deck.id);
-    // 篩選出今天需要複習的卡片，若全部完成，也可以讓使用者自由瀏覽
     const dueCards = cards.filter(c => isCardDue(c));
     this.studyQueue = dueCards.length > 0 ? dueCards : cards;
     this.currentCardIndex = 0;
@@ -201,7 +309,9 @@ class AnkiApp {
       <div>
         <!-- 頂部進度資訊 -->
         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--label-secondary); margin-bottom: 6px;">
-          <div style="font-weight: 600; color: var(--label-primary);">${this.escapeHtml(this.activeDeck.title)}</div>
+          <button id="btn-exit-study" style="background: none; border: none; color: var(--accent-blue); font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0;">
+            ← ${this.escapeHtml(this.activeDeck.title)}
+          </button>
           <div>進度: ${this.currentCardIndex + 1} / ${total}</div>
         </div>
         <div class="progress-container">
@@ -219,9 +329,14 @@ class AnkiApp {
 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--accent-blue); letter-spacing: 0.5px;">QUESTION (正面)</span>
-                  <button id="btn-speak-front" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 4px;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                  </button>
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <button id="btn-edit-card" style="background: none; border: none; cursor: pointer; color: var(--label-secondary); padding: 6px;" title="編輯卡片">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </button>
+                    <button id="btn-speak-front" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 6px;" title="語音發音">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                    </button>
+                  </div>
                 </div>
 
                 <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px;">
@@ -241,9 +356,14 @@ class AnkiApp {
 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--color-good); letter-spacing: 0.5px;">ANSWER (解答)</span>
-                  <button id="btn-speak-back" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 4px;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                  </button>
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <button id="btn-edit-card-back" style="background: none; border: none; cursor: pointer; color: var(--label-secondary); padding: 6px;" title="編輯卡片">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </button>
+                    <button id="btn-speak-back" style="background: none; border: none; cursor: pointer; color: var(--accent-blue); padding: 6px;" title="語音發音">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                    </button>
+                  </div>
                 </div>
 
                 <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px;">
@@ -294,17 +414,32 @@ class AnkiApp {
       triggerHaptic(15);
     };
 
-    // 點擊卡片任何地方（除發音按鈕外）精準觸發 3D 翻面
+    // 點擊卡片任何地方（除按鈕外）精準觸發 3D 翻面
     flipper.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
       toggleFlip();
     });
 
-    // 綁定滑動手勢於外層容器，左右拖曳評分
+    // 綁定手勢：拖曳外層 wrapper，左右滑動評分
     attachCardGestures(dragWrapper, {
       onSwipeLeft: () => this.handleRateCard(Rating.AGAIN),
       onSwipeRight: () => this.handleRateCard(Rating.GOOD)
     });
+
+    // 離開複習返回牌組詳細頁
+    document.getElementById('btn-exit-study')?.addEventListener('click', () => {
+      triggerHaptic(10);
+      this.renderDeckDetailView(this.activeDeck);
+    });
+
+    // 即時編輯目前這張卡片
+    const openEditorForThisCard = (e) => {
+      e.stopPropagation();
+      triggerHaptic(15);
+      this.renderCardEditor(card, 'study', { deck: this.activeDeck });
+    };
+    document.getElementById('btn-edit-card')?.addEventListener('click', openEditorForThisCard);
+    document.getElementById('btn-edit-card-back')?.addEventListener('click', openEditorForThisCard);
 
     // 朗讀按鈕
     document.getElementById('btn-speak-front')?.addEventListener('click', (e) => {
@@ -346,51 +481,94 @@ class AnkiApp {
     this.renderStudyCard();
   }
 
-  // --- 3. 新增卡片視圖 (Add Card View) ---
-  async renderAddCardView() {
+  // --- 4. 卡片編輯/新增視圖 (Card Editor View) ---
+  async renderCardEditor(card = null, returnView = 'decks', context = {}) {
+    const isEditing = !!card;
     const decks = await db.getAllDecks();
+    const selectedDeckId = card ? card.deckId : (context.deck ? context.deck.id : (this.activeDeck ? this.activeDeck.id : (decks[0]?.id || 1)));
+
     const main = document.getElementById('app-main');
 
     main.innerHTML = `
       <div style="padding-top: 8px;">
-        <h1 class="ios-large-title">新增卡片</h1>
+        <!-- 頂部導航 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <button id="btn-cancel-edit" style="background: none; border: none; color: var(--accent-blue); font-size: 16px; font-weight: 500; cursor: pointer; padding: 4px 0;">
+            ${isEditing ? '取消' : '返回'}
+          </button>
+          <div style="font-size: 17px; font-weight: 600;">${isEditing ? '編輯卡片' : '新增卡片'}</div>
+          <div style="width: 40px;"></div>
+        </div>
+
         <p style="color: var(--label-secondary); font-size: 14px; margin-bottom: 20px;">
           支援德語冠詞自動變色 (der 藍 / die 紅 / das 綠)、複數形或日語假名，如: der Apfel [die Äpfel]
         </p>
 
-        <form id="form-add-card" style="display: flex; flex-direction: column; gap: 16px;">
+        <form id="form-card-editor" style="display: flex; flex-direction: column; gap: 16px;">
           <div>
             <label class="ios-group-title" style="margin-left: 4px;">選擇所屬牌組</label>
             <select id="card-deck-id" class="ios-input" style="appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=\\'gray\\' height=\\'24\\' viewBox=\\'0 0 24 24\\' width=\\'24\\' xmlns=\\'http://www.w3.org/2000/svg\\'><path d=\\'M7 10l5 5 5-5z\\'/></svg>'); background-repeat: no-repeat; background-position-x: 96%; background-position-y: 50%;">
-              ${decks.map(d => `<option value="${d.id}" ${this.activeDeck && this.activeDeck.id === d.id ? 'selected' : ''}>${this.escapeHtml(d.title)}</option>`).join('')}
+              ${decks.map(d => `<option value="${d.id}" ${d.id === selectedDeckId ? 'selected' : ''}>${this.escapeHtml(d.title)}</option>`).join('')}
             </select>
           </div>
 
           <div>
             <label class="ios-group-title" style="margin-left: 4px;">正面 (題目 / 單字)</label>
-            <textarea id="card-front" class="ios-input" rows="3" placeholder="例如: der Apfel\n[die Äpfel] 或 食べる\n[たべる]" required></textarea>
+            <textarea id="card-front" class="ios-input" rows="3" placeholder="例如: der Apfel\n[die Äpfel] 或 食べる\n[たべる]" required>${card ? this.escapeHtml(card.front) : ''}</textarea>
           </div>
 
           <div>
             <label class="ios-group-title" style="margin-left: 4px;">背面 (解答 / 中文釋義)</label>
-            <textarea id="card-back" class="ios-input" rows="3" placeholder="例如: 蘋果 (陽性名詞) 或 吃 (動詞)" required></textarea>
+            <textarea id="card-back" class="ios-input" rows="3" placeholder="例如: 蘋果 (陽性名詞) 或 吃 (動詞)" required>${card ? this.escapeHtml(card.back) : ''}</textarea>
           </div>
 
           <div>
             <label class="ios-group-title" style="margin-left: 4px;">補充例句 / 備註 (選填)</label>
-            <input id="card-hint" class="ios-input" placeholder="例如: Der Apfel ist rot." />
+            <input id="card-hint" class="ios-input" placeholder="例如: Der Apfel ist rot." value="${card && card.hint ? this.escapeHtml(card.hint) : ''}" />
           </div>
 
-          <div style="margin-top: 12px; display: flex; gap: 10px;">
-            <button type="submit" class="btn-pill" style="flex: 1; height: 50px;">
-              儲存卡片
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <button type="submit" class="btn-pill" style="height: 50px;">
+              ${isEditing ? '儲存修改' : '新增卡片'}
             </button>
+            ${isEditing ? `
+              <button type="button" id="btn-delete-card" class="btn-pill btn-secondary" style="height: 50px; color: var(--color-again);">
+                刪除此卡片
+              </button>
+            ` : ''}
           </div>
         </form>
       </div>
     `;
 
-    document.getElementById('form-add-card')?.addEventListener('submit', async (e) => {
+    // 取消按鈕
+    document.getElementById('btn-cancel-edit')?.addEventListener('click', () => {
+      triggerHaptic(10);
+      this.returnToPreviousView(returnView, context);
+    });
+
+    // 刪除卡片
+    if (isEditing) {
+      document.getElementById('btn-delete-card')?.addEventListener('click', async () => {
+        if (confirm('確定要刪除這張卡片嗎？此動作無法復原。')) {
+          await db.deleteCard(card.id);
+          triggerHaptic(20);
+
+          // 若在複習模式下，將該卡片從複習隊列移除
+          if (returnView === 'study') {
+            this.studyQueue = this.studyQueue.filter(c => c.id !== card.id);
+            if (this.currentCardIndex >= this.studyQueue.length) {
+              this.currentCardIndex = Math.max(0, this.studyQueue.length - 1);
+            }
+          }
+          alert('卡片已刪除。');
+          this.returnToPreviousView(returnView, context);
+        }
+      });
+    }
+
+    // 表單提交
+    document.getElementById('form-card-editor')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const deckId = Number(document.getElementById('card-deck-id').value);
       const front = document.getElementById('card-front').value.trim();
@@ -399,26 +577,63 @@ class AnkiApp {
 
       if (!front || !back) return;
 
-      await db.addCard({
-        deckId,
-        front,
-        back,
-        hint,
-        interval: 0,
-        repetitions: 0,
-        easeFactor: 2.5,
-        nextReview: new Date().toISOString().split('T')[0]
-      });
+      if (isEditing) {
+        const updatedCard = {
+          ...card,
+          deckId,
+          front,
+          back,
+          hint
+        };
+        await db.updateCard(updatedCard);
 
-      triggerHaptic(20);
-      alert('✅ 卡片已成功儲存！');
-      document.getElementById('card-front').value = '';
-      document.getElementById('card-back').value = '';
-      document.getElementById('card-hint').value = '';
+        // 若在複習隊列中，同步更新當前隊列卡片物件
+        if (returnView === 'study') {
+          const idx = this.studyQueue.findIndex(c => c.id === card.id);
+          if (idx !== -1) {
+            this.studyQueue[idx] = updatedCard;
+          }
+        }
+
+        triggerHaptic(20);
+        alert('✅ 卡片修改已儲存！');
+        this.returnToPreviousView(returnView, context);
+      } else {
+        await db.addCard({
+          deckId,
+          front,
+          back,
+          hint,
+          interval: 0,
+          repetitions: 0,
+          easeFactor: 2.5,
+          nextReview: new Date().toISOString().split('T')[0]
+        });
+
+        triggerHaptic(20);
+        alert('✅ 卡片已成功新增！');
+        document.getElementById('card-front').value = '';
+        document.getElementById('card-back').value = '';
+        document.getElementById('card-hint').value = '';
+
+        if (returnView !== 'decks') {
+          this.returnToPreviousView(returnView, context);
+        }
+      }
     });
   }
 
-  // --- 4. 設定與本地 JSON 資料備份視圖 (Settings View) ---
+  returnToPreviousView(returnView, context = {}) {
+    if (returnView === 'study') {
+      this.renderStudyCard();
+    } else if (returnView === 'deck-detail' && context.deck) {
+      this.renderDeckDetailView(context.deck);
+    } else {
+      this.switchView('decks');
+    }
+  }
+
+  // --- 5. 設定與本地 JSON 資料備份視圖 (Settings View) ---
   async renderSettingsView() {
     const decks = await db.getAllDecks();
     const cards = await db.getAllCards();
