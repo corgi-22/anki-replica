@@ -32,9 +32,10 @@ class AnkiApp {
     if (viewName === 'study' && payload) this.activeDeck = payload;
     if (viewName === 'deck-detail' && payload) this.activeDeck = payload;
 
-    // 更新導航欄狀態
+    // 更新導航欄狀態 (若在牌組詳細或複習中，保持「牌組」高亮)
+    const activeTabName = (viewName === 'deck-detail' || viewName === 'study') ? 'decks' : viewName;
     document.querySelectorAll('.tab-item').forEach(tab => {
-      tab.classList.toggle('active', tab.dataset.view === viewName);
+      tab.classList.toggle('active', tab.dataset.view === activeTabName);
     });
 
     const contentArea = document.getElementById('app-main');
