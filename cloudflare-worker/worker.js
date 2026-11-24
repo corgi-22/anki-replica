@@ -386,6 +386,16 @@ function escapeXml(unsafe) {
   });
 }
 
+async function toUint8Array(data) {
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    const buf = await data.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  return null;
+}
+
 /**
  * 調用微軟 Edge WebSocket 合成語音並收集 MP3 二進制音訊
  */
@@ -419,10 +429,29 @@ async function synthesizeSpeech(text, voice) {
 
   return new Promise((resolve, reject) => {
     const audioChunks = [];
+    let isFinished = false;
+
     const timeout = setTimeout(() => {
+      if (isFinished) return;
+      isFinished = true;
       try { ws.close(); } catch (_) {}
-      reject(new Error('語音合成超時 (15秒)'));
+      if (audioChunks.length > 0) {
+        resolve(mergeChunks(audioChunks));
+      } else {
+        reject(new Error('語音合成超時 (15秒)'));
+      }
     }, 15000);
+
+    function mergeChunks(chunks) {
+      const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+      const merged = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+      return merged;
+    }
 
     const configMessage =
       `Content-Type:application/json; charset=utf-8\r\n` +
@@ -445,30 +474,29 @@ async function synthesizeSpeech(text, voice) {
 
     ws.send(ssmlMessage);
 
-    ws.addEventListener('message', (event) => {
+    ws.addEventListener('message', async (event) => {
       const data = event.data;
 
       if (typeof data === 'string') {
         if (data.includes('Path:turn.end')) {
+          if (isFinished) return;
+          isFinished = true;
           clearTimeout(timeout);
           try { ws.close(); } catch (_) {}
 
-          const totalLength = audioChunks.reduce((acc, chunk) => acc + chunk.length, 0);
-          const merged = new Uint8Array(totalLength);
-          let offset = 0;
-          for (const chunk of audioChunks) {
-            merged.set(chunk, offset);
-            offset += chunk.length;
+          if (audioChunks.length > 0) {
+            resolve(mergeChunks(audioChunks));
+          } else {
+            reject(new Error('微軟合成完成但未傳回音訊資料'));
           }
-          resolve(merged);
         }
-      } else if (data instanceof ArrayBuffer) {
-        const view = new DataView(data);
-        if (data.byteLength > 2) {
-          const headerLength = view.getUint16(0);
+      } else {
+        const bytes = await toUint8Array(data);
+        if (bytes && bytes.length > 2) {
+          const headerLength = (bytes[0] << 8) | bytes[1];
           const audioBodyOffset = 2 + headerLength;
-          if (data.byteLength > audioBodyOffset) {
-            const chunk = new Uint8Array(data.slice(audioBodyOffset));
+          if (bytes.length > audioBodyOffset) {
+            const chunk = bytes.slice(audioBodyOffset);
             audioChunks.push(chunk);
           }
         }
@@ -476,21 +504,20 @@ async function synthesizeSpeech(text, voice) {
     });
 
     ws.addEventListener('error', (err) => {
+      if (isFinished) return;
+      isFinished = true;
       clearTimeout(timeout);
       reject(new Error(`WebSocket 傳輸錯誤: ${err.message || '未知錯誤'}`));
     });
 
     ws.addEventListener('close', () => {
+      if (isFinished) return;
+      isFinished = true;
       clearTimeout(timeout);
       if (audioChunks.length > 0) {
-        const totalLength = audioChunks.reduce((acc, chunk) => acc + chunk.length, 0);
-        const merged = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of audioChunks) {
-          merged.set(chunk, offset);
-          offset += chunk.length;
-        }
-        resolve(merged);
+        resolve(mergeChunks(audioChunks));
+      } else {
+        reject(new Error('未收到任何音訊資料 (連線關閉)'));
       }
     });
   });
