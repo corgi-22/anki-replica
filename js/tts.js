@@ -54,26 +54,42 @@ let currentAudio = null;
  * 原生瀏覽器 Web Speech API 發音（備援機制）
  */
 function speakNative(cleanText, targetLang) {
-  if (!('speechSynthesis' in window)) return;
-
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(cleanText);
-  utterance.lang = targetLang;
-  utterance.rate = 0.9;
-  utterance.pitch = 1.0;
-
-  // 優先選取高品質/自然音色
-  const voices = window.speechSynthesis.getVoices();
-  const matchedVoice = voices.find(v =>
-    v.lang.startsWith(targetLang.slice(0, 2)) &&
-    (v.name.includes('Siri') || v.name.includes('Enhanced') || v.name.includes('Natural') || v.name.includes('Google'))
-  ) || voices.find(v => v.lang.startsWith(targetLang.slice(0, 2)));
-
-  if (matchedVoice) {
-    utterance.voice = matchedVoice;
+  if (!('speechSynthesis' in window)) {
+    console.warn('此瀏覽器不支援 Web Speech API');
+    return;
   }
 
-  window.speechSynthesis.speak(utterance);
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = targetLang;
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    // 優先找目標語言 (例如 de-DE、ja-JP)
+    let matchedVoice = voices.find(v =>
+      v.lang.replace('_', '-').toLowerCase().startsWith(targetLang.slice(0, 2).toLowerCase()) &&
+      (v.name.includes('Siri') || v.name.includes('Enhanced') || v.name.includes('Natural') || v.name.includes('Google'))
+    ) || voices.find(v => v.lang.replace('_', '-').toLowerCase().startsWith(targetLang.slice(0, 2).toLowerCase()));
+
+    // 若系統完全沒安裝該語言發音包 (常見於繁中 Windows 沒裝德語套件)，至少切到英文或系統預設音色，保證能發出聲音
+    if (!matchedVoice) {
+      matchedVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+    }
+
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+    }
+
+    utterance.onerror = (e) => {
+      console.warn('原生語音播放失敗:', e);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    console.error('speakNative error:', e);
+  }
 }
 
 /**
@@ -94,7 +110,10 @@ export async function speakText(text, lang) {
 
   // 停止前一個正在播放的音訊
   if (currentAudio) {
-    currentAudio.pause();
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch (_) {}
     currentAudio = null;
   }
 
@@ -104,16 +123,20 @@ export async function speakText(text, lang) {
     const cacheKey = `${voice}:${cleanText}`;
 
     try {
-      // 1. 檢查 IndexedDB 本地快取 (0 毫秒、完全離線可用)
+      // 1. 檢查 IndexedDB 本地快取 (必須大於 100 bytes 且可正常播放)
       const cachedBlob = await db.getAudio(cacheKey);
-      if (cachedBlob) {
-        const audioUrl = URL.createObjectURL(cachedBlob);
-        currentAudio = new Audio(audioUrl);
-        currentAudio.play();
-        return;
+      if (cachedBlob && cachedBlob.size > 100) {
+        try {
+          const audioUrl = URL.createObjectURL(cachedBlob);
+          currentAudio = new Audio(audioUrl);
+          await currentAudio.play();
+          return;
+        } catch (playErr) {
+          console.warn('快取音訊播放失敗，清除壞掉的快取:', playErr);
+        }
       }
 
-      // 2. 本地無快取，向 Cloudflare Worker 請求微軟神經網路語音
+      // 2. 本地無有效快取，向 Cloudflare Worker 請求微軟神經網路語音
       const fetchUrl = `${workerUrl}/tts?text=${encodeURIComponent(cleanText)}&voice=${encodeURIComponent(voice)}`;
       const response = await fetch(fetchUrl);
 
@@ -122,6 +145,9 @@ export async function speakText(text, lang) {
       }
 
       const audioBlob = await response.blob();
+      if (!audioBlob || audioBlob.size < 100) {
+        throw new Error('回傳的音訊檔案為空或無效');
+      }
 
       // 3. 永久儲存至 IndexedDB 快取
       await db.saveAudio(cacheKey, audioBlob);
@@ -129,10 +155,10 @@ export async function speakText(text, lang) {
       // 4. 立即播放
       const audioUrl = URL.createObjectURL(audioBlob);
       currentAudio = new Audio(audioUrl);
-      currentAudio.play();
+      await currentAudio.play();
       return;
     } catch (err) {
-      console.warn('⚠️ Edge TTS 遠端請求失敗或斷網，自動降級切換至原生語音:', err.message);
+      console.warn('⚠️ Edge TTS 遠端請求失敗或被阻擋，自動降級切換至原生語音:', err.message);
       // 降級切換為原生 Web Speech API
       speakNative(cleanText, targetLang);
       return;
