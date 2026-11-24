@@ -91,14 +91,14 @@ class AnkiApp {
         <div style="background: linear-gradient(135deg, var(--accent-blue), #5856D6); padding: 18px 20px; border-radius: 20px; color: #fff; margin-bottom: 24px; box-shadow: 0 8px 20px rgba(0,122,255,0.25);">
           <div style="font-size: 13px; opacity: 0.85;">今日複習目標</div>
           <div style="font-size: 32px; font-weight: 800; margin: 4px 0;">${totalDue} <span style="font-size: 16px; font-weight: 500;">張卡片待複習</span></div>
-          <div style="font-size: 12px; opacity: 0.9;">遵循艾賓浩斯遺忘曲線，每天 10 分鐘形成長期記憶</div>
+          <div style="font-size: 12px; opacity: 0.9;">每天複習 10 分鐘形成長期記憶</div>
         </div>
 
-        <div class="ios-group-title">牌組列表 (${deckStats.length} 個 · 點擊查看卡片與複習)</div>
+        <div class="ios-group-title">牌組列表 (共 ${deckStats.length} 個)</div>
         <div class="ios-group-card">
           ${deckStats.length === 0 ? `
             <div style="padding: 32px 16px; text-align: center; color: var(--label-secondary);">
-              尚無牌組，點擊右上角新增一個吧！
+              尚無牌組，點擊右上角新增吧！
             </div>
           ` : deckStats.map(d => `
             <div class="ios-cell deck-item-row" data-id="${d.id}">
@@ -502,7 +502,7 @@ class AnkiApp {
         </div>
 
         <p style="color: var(--label-secondary); font-size: 14px; margin-bottom: 20px;">
-          支援德語冠詞自動變色 (der 藍 / die 紅 / das 綠)、複數形或日語假名，如: der Apfel [die Äpfel]
+          支援德語冠詞自動變色 (der 藍 / die 紅 / das 綠)、複數形，如: der Apfel [die Äpfel]
         </p>
 
         <form id="form-card-editor" style="display: flex; flex-direction: column; gap: 16px;">
@@ -648,11 +648,11 @@ class AnkiApp {
       <div style="padding-top: 8px;">
         <h1 class="ios-large-title">設定與語音</h1>
         <p style="color: var(--label-secondary); font-size: 14px; margin-bottom: 20px;">
-          個人化系統偏好、資料備份與微軟廣播級高品質神經網路語音設定。
+          個人化系統偏好、資料備份與語音設定。
         </p>
 
         <!-- 高品質語音引擎區塊 (方案 1: Cloudflare Edge TTS) -->
-        <div class="ios-group-title">🎙️ 高品質語音發音 (微軟 Edge Neural)</div>
+        <div class="ios-group-title">🎙️ 語音設定</div>
         <div class="ios-group-card">
           <div class="ios-cell">
             <div>
@@ -669,7 +669,7 @@ class AnkiApp {
             <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">Cloudflare Worker 代理網址</div>
             <input id="input-worker-url" class="ios-input" placeholder="例如: https://my-anki-tts.workers.dev" value="${this.escapeHtml(savedWorkerUrl)}" style="font-size: 14px; padding: 10px;" />
             <div style="font-size: 11px; color: var(--label-secondary); margin-top: 6px; line-height: 1.4;">
-              💡 參閱專案目錄下的 <code>cloudflare-worker/README.md</code>，只需 1 分鐘免費貼上部署。未設定時會自動使用原生發音備援。
+              💡 參閱專案目錄下的 <code>cloudflare-worker/README.md</code>。未設定時會自動使用原生發音備援。
             </div>
           </div>
 
@@ -686,7 +686,7 @@ class AnkiApp {
           <div class="ios-cell">
             <div>
               <div style="font-weight: 600;">離線音訊快取</div>
-              <div style="font-size: 12px; color: var(--label-secondary);">已聽過的單字永久快取於本機，離線 0 流量秒播</div>
+              <div style="font-size: 12px; color: var(--label-secondary);">已聽過的單字將快取於本機</div>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span id="cache-count-label" style="font-weight: 600; color: var(--accent-blue);">${audioCacheCount} 個</span>
@@ -720,7 +720,7 @@ class AnkiApp {
               </div>
               <div>
                 <div style="font-weight: 600;">匯出 JSON 備份檔</div>
-                <div style="font-size: 12px; color: var(--label-secondary);">將所有牌組與學習進度打包下載至手機/電腦</div>
+                <div style="font-size: 12px; color: var(--label-secondary);">將所有牌組與學習進度下載至裝置</div>
               </div>
             </div>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="var(--label-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
