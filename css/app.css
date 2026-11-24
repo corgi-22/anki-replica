@@ -242,34 +242,37 @@ body {
   transform: rotateY(180deg);
 }
 
-/* 滑動徽章提示 (Tinder-style) */
+/* 滑動徽章提示 (Tinder-style 簡約圓形勾勾與叉叉) */
 .badge-stamp {
   position: absolute;
-  top: 24px;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  border: 2.5px solid;
+  top: 18px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid;
   opacity: 0;
   pointer-events: none;
   z-index: 10;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  background: var(--card-bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .badge-again {
-  left: 20px;
+  left: 18px;
   color: var(--color-again);
   border-color: var(--color-again);
-  transform: rotate(-15deg);
+  transform: rotate(-10deg) scale(0.95);
 }
 
 .badge-good {
-  right: 20px;
+  right: 18px;
   color: var(--color-good);
   border-color: var(--color-good);
-  transform: rotate(15deg);
+  transform: rotate(10deg) scale(0.95);
 }
 
 /* 底部拇指評分按鈕群 */

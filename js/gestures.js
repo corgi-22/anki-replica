@@ -17,8 +17,8 @@ export function attachCardGestures(dragElement, options = {}) {
 
   const SWIPE_THRESHOLD = 80; // 滑動觸發門檻 (px)
 
-  const badgeAgain = dragElement.querySelector('.badge-again');
-  const badgeGood = dragElement.querySelector('.badge-good');
+  const badgesAgain = dragElement.querySelectorAll('.badge-again');
+  const badgesGood = dragElement.querySelectorAll('.badge-good');
 
   function setTransform(x, y, animated = false) {
     if (animated) {
@@ -30,17 +30,19 @@ export function attachCardGestures(dragElement, options = {}) {
     const rotation = (x / 20).toFixed(2);
     dragElement.style.transform = `translate3d(${x}px, ${y * 0.2}px, 0) rotate(${rotation}deg)`;
 
-    // 更新滑動標籤透明度
-    if (badgeAgain && badgeGood) {
+    // 更新滑動標籤透明度 (同時支援正面與背面)
+    if (badgesAgain.length > 0 || badgesGood.length > 0) {
       if (x < -15) {
-        badgeAgain.style.opacity = Math.min(1, Math.abs(x) / SWIPE_THRESHOLD);
-        badgeGood.style.opacity = 0;
+        const opacity = Math.min(1, Math.abs(x) / SWIPE_THRESHOLD);
+        badgesAgain.forEach(el => el.style.opacity = opacity);
+        badgesGood.forEach(el => el.style.opacity = 0);
       } else if (x > 15) {
-        badgeGood.style.opacity = Math.min(1, x / SWIPE_THRESHOLD);
-        badgeAgain.style.opacity = 0;
+        const opacity = Math.min(1, x / SWIPE_THRESHOLD);
+        badgesGood.forEach(el => el.style.opacity = opacity);
+        badgesAgain.forEach(el => el.style.opacity = 0);
       } else {
-        badgeAgain.style.opacity = 0;
-        badgeGood.style.opacity = 0;
+        badgesAgain.forEach(el => el.style.opacity = 0);
+        badgesGood.forEach(el => el.style.opacity = 0);
       }
     }
   }
@@ -99,8 +101,8 @@ export function attachCardGestures(dragElement, options = {}) {
     } else {
       // 未達門檻，彈回原位
       setTransform(0, 0, true);
-      if (badgeAgain) badgeAgain.style.opacity = 0;
-      if (badgeGood) badgeGood.style.opacity = 0;
+      badgesAgain.forEach(el => el.style.opacity = 0);
+      badgesGood.forEach(el => el.style.opacity = 0);
     }
 
     // 稍微延遲重設 hasMoved，避免拖曳放開時誤觸發 click 事件

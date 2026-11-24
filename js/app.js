@@ -325,8 +325,12 @@ class AnkiApp {
             <div class="card-flipper" id="study-flipper">
               <!-- 卡片正面 (題目) -->
               <div class="card-face front">
-                <div class="badge-stamp badge-again">重來 AGAIN</div>
-                <div class="badge-stamp badge-good">良好 GOOD</div>
+                <div class="badge-stamp badge-again" aria-label="重來">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+                <div class="badge-stamp badge-good" aria-label="良好">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--accent-blue); letter-spacing: 0.5px;">QUESTION (正面)</span>
@@ -352,8 +356,12 @@ class AnkiApp {
 
               <!-- 卡片背面 (答案與詳解) -->
               <div class="card-face back">
-                <div class="badge-stamp badge-again">重來 AGAIN</div>
-                <div class="badge-stamp badge-good">良好 GOOD</div>
+                <div class="badge-stamp badge-again" aria-label="重來">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+                <div class="badge-stamp badge-good" aria-label="良好">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--color-good); letter-spacing: 0.5px;">ANSWER (解答)</span>
