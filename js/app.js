@@ -836,7 +836,7 @@ class AnkiApp {
                 <div style="font-weight: 600; font-size: 16px;">連結 Google 帳號備份</div>
               </div>
               <p style="font-size: 13px; color: var(--label-secondary); margin-bottom: 14px; line-height: 1.45;">
-                登入你的 Google 帳號，可將所有牌組與間隔複習進度同步至個人雲端硬碟的 AppData 專屬隱私空間，跨裝置無縫接軌。
+                登入Google帳戶以將資料同步至個人雲端硬碟
               </p>
               <button id="btn-gdrive-login" class="btn-pill" style="width: 100%; height: 48px; background-color: #4285F4; font-size: 15px; font-weight: 600; color: #fff;">
                 使用 Google 帳號登入
