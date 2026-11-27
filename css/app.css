@@ -388,3 +388,128 @@ body {
   border-radius: 999px;
   transition: width 0.3s ease;
 }
+
+/* iOS 彈窗 / 對話框 */
+.ios-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ios-modal-dialog {
+  background-color: var(--card-bg);
+  width: 100%;
+  max-width: 400px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--separator);
+  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScaleUp {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.ios-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.ios-modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--label-primary);
+}
+
+.ios-modal-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--label-secondary);
+  cursor: pointer;
+  padding: 4px 6px;
+  font-family: inherit;
+}
+
+.ios-modal-btn-primary {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.ios-modal-body {
+  padding: 18px;
+}
+
+/* 語言選項分段標籤 (Segmented Lang Pills) */
+.lang-selector-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.lang-option-pill {
+  position: relative;
+  cursor: pointer;
+}
+
+.lang-option-pill input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lang-option-pill .pill-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background-color: var(--card-elevated);
+  color: var(--label-primary);
+  border: 1.5px solid transparent;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.lang-option-pill input[type="radio"]:checked + .pill-label {
+  background-color: rgba(0, 122, 255, 0.12);
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.badge-lang-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background-color: var(--card-elevated);
+  color: var(--label-secondary);
+}

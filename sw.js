@@ -2,7 +2,7 @@
  * sw.js - Service Worker 離線快取
  */
 
-const CACHE_NAME = 'anki-mobile-v7';
+const CACHE_NAME = 'anki-mobile-v8';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

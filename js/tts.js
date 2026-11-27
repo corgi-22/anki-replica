@@ -26,21 +26,61 @@ export const EDGE_VOICES = {
 };
 
 /**
+ * 檢查文字是否具有德語顯著特徵（變音字母 ä/ö/ü/ß 或德語專屬冠詞/常用詞彙）
+ */
+export function isGermanText(text) {
+  if (!text) return false;
+  const hasGermanSpecialChars = /[äöüßÄÖÜ]/.test(text);
+  const hasGermanArticles = /\b(der|die|das|dem|den|des|ein|eine|einen|einem|einer|eines|und|nicht|ist|sind|guten|morgen|tag|abend|danke|bitte|hallo|tschüss)\b/i.test(text);
+  return hasGermanSpecialChars || hasGermanArticles;
+}
+
+/**
+ * 檢查文字是否具有日語假名特徵
+ */
+export function isJapaneseText(text) {
+  if (!text) return false;
+  return /[\u3040-\u309F\u30A0-\u30FF]/.test(text);
+}
+
+/**
+ * 智慧推斷牌組的有效朗讀語言
+ * 1. 若牌組手動指定 (de-DE, ja-JP, en-US)，直接使用該語言
+ * 2. 若牌組設為 'auto' (或舊牌組未設)：
+ *    掃描牌組內卡片正面，若有任一張含有德語特徵，整副牌組推斷為德語 (de-DE)；
+ *    若有任一張含有日語假名，整副牌組推斷為日語 (ja-JP)；
+ *    否則回傳 'auto'
+ */
+export function getEffectiveDeckLanguage(deck, cards = []) {
+  if (deck && deck.lang && deck.lang !== 'auto') {
+    return deck.lang;
+  }
+
+  if (cards && cards.length > 0) {
+    const hasGermanCard = cards.some(c => isGermanText(c.front));
+    if (hasGermanCard) return 'de-DE';
+
+    const hasJapaneseCard = cards.some(c => isJapaneseText(c.front));
+    if (hasJapaneseCard) return 'ja-JP';
+  }
+
+  return 'auto';
+}
+
+/**
  * 自動判斷字串語言（德文、日文、繁中、英文）
  */
 export function detectLanguage(text) {
+  if (!text) return 'en-US';
+
   // 1. 日文：包含平假名或片假名
-  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
+  if (isJapaneseText(text)) return 'ja-JP';
 
   // 2. 德文：專有變音字符 (ä, ö, ü, ß) 或常見冠詞詞彙
-  const hasGermanSpecialChars = /[äöüßÄÖÜ]/.test(text);
-  const hasGermanArticles = /\b(der|die|das|dem|den|des|ein|eine|einen|einem|einer|eines|und|nicht|ist|sind|guten|morgen|tag|abend|danke|bitte|hallo|tschüss)\b/i.test(text);
-  if (hasGermanSpecialChars || hasGermanArticles) {
-    return 'de-DE';
-  }
+  if (isGermanText(text)) return 'de-DE';
 
-  // 3. 純繁體/通用中文 (漢字且無英文)
-  if (/[\u4E00-\u9FFF]/.test(text) && !/[a-zA-Z]/.test(text)) {
+  // 3. 繁體/通用中文：只要包含漢字 (且非日文)，優先判定為中文 (即使含有少量英文或詞性註記)
+  if (/[\u4E00-\u9FFF]/.test(text)) {
     return 'zh-TW';
   }
 

@@ -66,7 +66,8 @@ class Database {
       const germanDeckId = await this.addDeck({
         title: '德語基礎高頻單字 (A1 範例)',
         description: '自動色彩標記性別 (der藍/die紅/das綠)、支援德語發音與複數',
-        color: '#FF9500'
+        color: '#FF9500',
+        lang: 'de-DE'
       });
 
       const germanCards = [
@@ -95,7 +96,8 @@ class Database {
       const jpDeckId = await this.addDeck({
         title: '日語實用單字 (N5~N4 範例)',
         description: '涵蓋日常生活常用單字與假名，支援發音與手勢',
-        color: '#007AFF'
+        color: '#007AFF',
+        lang: 'ja-JP'
       });
 
       const jpCards = [
@@ -140,9 +142,21 @@ class Database {
       const tx = this.db.transaction('decks', 'readwrite');
       const store = tx.objectStore('decks');
       const req = store.add({
+        lang: 'auto',
         ...deckData,
         createdAt: new Date().toISOString()
       });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async updateDeck(deckData) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('decks', 'readwrite');
+      const store = tx.objectStore('decks');
+      const req = store.put(deckData);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });

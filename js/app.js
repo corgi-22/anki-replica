@@ -7,12 +7,13 @@
 import { db } from './db.js';
 import { scheduleCard, isCardDue, Rating } from './srs.js';
 import { attachCardGestures } from './gestures.js';
-import { speakText, triggerHaptic } from './tts.js';
+import { speakText, triggerHaptic, detectLanguage, getEffectiveDeckLanguage } from './tts.js';
 
 class AnkiApp {
   constructor() {
     this.currentView = 'decks';
     this.activeDeck = null;
+    this.effectiveLang = 'auto';
     this.studyQueue = [];
     this.currentCardIndex = 0;
     this.isFlipped = false;
@@ -69,7 +70,7 @@ class AnkiApp {
     const deckStats = decks.map(deck => {
       const cards = allCards.filter(c => c.deckId === deck.id);
       const dueCards = cards.filter(c => isCardDue(c));
-      return { ...deck, total: cards.length, due: dueCards.length };
+      return { ...deck, total: cards.length, due: dueCards.length, cards };
     });
 
     const totalDue = deckStats.reduce((sum, d) => sum + d.due, 0);
@@ -106,8 +107,10 @@ class AnkiApp {
                 <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${d.color || '#007AFF'}; flex-shrink: 0;"></div>
                 <div>
                   <div style="font-weight: 600; font-size: 16px;">${this.escapeHtml(d.title)}</div>
-                  <div style="font-size: 12px; color: var(--label-secondary); margin-top: 2px;">
-                    共 ${d.total} 張卡片 ${d.description ? `· ${this.escapeHtml(d.description)}` : ''}
+                  <div style="font-size: 12px; color: var(--label-secondary); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <span>共 ${d.total} 張卡片</span>
+                    <span class="badge-lang-tag">${this.getDeckLangLabel(d, d.cards)}</span>
+                    ${d.description ? `<span>· ${this.escapeHtml(d.description)}</span>` : ''}
                   </div>
                 </div>
               </div>
@@ -141,18 +144,139 @@ class AnkiApp {
 
     // 點擊新增牌組
     document.getElementById('btn-create-deck')?.addEventListener('click', () => {
-      this.promptAddDeck();
+      this.openDeckModal();
     });
   }
 
-  async promptAddDeck() {
-    const title = prompt('請輸入新牌組名稱 (例如: 多益高頻詞彙 / 日檢N2 / 德語A2):');
-    if (!title || !title.trim()) return;
+  getDeckLangLabel(deck, cards = []) {
+    const lang = deck?.lang || 'auto';
+    if (lang === 'de-DE') return '🇩🇪 德語';
+    if (lang === 'ja-JP') return '🇯🇵 日語';
+    if (lang === 'en-US') return '🇺🇸 英語';
 
-    const desc = prompt('請輸入牌組備註/說明 (可略過):') || '';
-    await db.addDeck({ title: title.trim(), description: desc.trim(), color: '#007AFF' });
-    triggerHaptic(20);
-    this.renderDecksView();
+    const inferred = getEffectiveDeckLanguage(deck, cards);
+    if (inferred === 'de-DE') return '🇩🇪 德語 (自動)';
+    if (inferred === 'ja-JP') return '🇯🇵 日語 (自動)';
+    return '🌐 自動偵測';
+  }
+
+  getLangDisplay(langCode) {
+    const map = {
+      'de-DE': '🇩🇪 德語',
+      'ja-JP': '🇯🇵 日語',
+      'en-US': '🇺🇸 英語',
+      'auto': '🌐 自動'
+    };
+    return map[langCode] || '🌐 自動';
+  }
+
+  openDeckModal(deck = null) {
+    const isEdit = !!deck;
+    const currentLang = deck?.lang || 'auto';
+
+    document.getElementById('deck-modal-container')?.remove();
+
+    const modalContainer = document.createElement('div');
+    modalContainer.id = 'deck-modal-container';
+    modalContainer.innerHTML = `
+      <div class="ios-modal-backdrop" id="deck-modal-backdrop">
+        <div class="ios-modal-dialog">
+          <div class="ios-modal-header">
+            <button type="button" class="ios-modal-btn" id="btn-modal-cancel">取消</button>
+            <div class="ios-modal-title">${isEdit ? '編輯牌組' : '建立新牌組'}</div>
+            <button type="button" class="ios-modal-btn ios-modal-btn-primary" id="btn-modal-save">儲存</button>
+          </div>
+          <div class="ios-modal-body">
+            <div style="margin-bottom: 16px;">
+              <label class="ios-group-title" style="margin: 0 0 6px 4px; display: block;">牌組名稱</label>
+              <input id="modal-deck-title" class="ios-input" placeholder="例如: 德語 A1 單字庫 / 多益核心" value="${isEdit ? this.escapeHtml(deck.title) : ''}" required autofocus />
+            </div>
+
+            <div style="margin-bottom: 16px;">
+              <label class="ios-group-title" style="margin: 0 0 6px 4px; display: block;">學習語言 (發音語系)</label>
+              <div class="lang-selector-group">
+                <label class="lang-option-pill">
+                  <input type="radio" name="modal-deck-lang" value="auto" ${currentLang === 'auto' ? 'checked' : ''} />
+                  <span class="pill-label">🌐 自動偵測</span>
+                </label>
+                <label class="lang-option-pill">
+                  <input type="radio" name="modal-deck-lang" value="de-DE" ${currentLang === 'de-DE' ? 'checked' : ''} />
+                  <span class="pill-label">🇩🇪 德語 (de-DE)</span>
+                </label>
+                <label class="lang-option-pill">
+                  <input type="radio" name="modal-deck-lang" value="ja-JP" ${currentLang === 'ja-JP' ? 'checked' : ''} />
+                  <span class="pill-label">🇯🇵 日語 (ja-JP)</span>
+                </label>
+                <label class="lang-option-pill">
+                  <input type="radio" name="modal-deck-lang" value="en-US" ${currentLang === 'en-US' ? 'checked' : ''} />
+                  <span class="pill-label">🇺🇸 英語 (en-US)</span>
+                </label>
+              </div>
+              <div style="font-size: 11px; color: var(--label-secondary); margin-top: 8px; line-height: 1.4; padding-left: 2px;">
+                💡 <strong>智慧推斷</strong>：設為「自動偵測」時，若牌組內有任一張卡片含德語特徵 (ä/ö/ü/ß/der/die/das)，整副卡片正面發音將自動統一為德語！
+              </div>
+            </div>
+
+            <div style="margin-bottom: 8px;">
+              <label class="ios-group-title" style="margin: 0 0 6px 4px; display: block;">說明 / 備註 (選填)</label>
+              <input id="modal-deck-desc" class="ios-input" placeholder="例如: 考試單字、日常語法" value="${isEdit && deck.description ? this.escapeHtml(deck.description) : ''}" />
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modalContainer);
+
+    const closeModal = () => {
+      triggerHaptic(10);
+      modalContainer.remove();
+    };
+
+    document.getElementById('btn-modal-cancel')?.addEventListener('click', closeModal);
+    document.getElementById('deck-modal-backdrop')?.addEventListener('click', (e) => {
+      if (e.target.id === 'deck-modal-backdrop') closeModal();
+    });
+
+    document.getElementById('btn-modal-save')?.addEventListener('click', async () => {
+      const title = document.getElementById('modal-deck-title').value.trim();
+      const desc = document.getElementById('modal-deck-desc').value.trim();
+      const selectedLangRadio = document.querySelector('input[name="modal-deck-lang"]:checked');
+      const lang = selectedLangRadio ? selectedLangRadio.value : 'auto';
+
+      if (!title) {
+        alert('請填寫牌組名稱！');
+        document.getElementById('modal-deck-title').focus();
+        return;
+      }
+
+      triggerHaptic(20);
+      if (isEdit) {
+        const updated = {
+          ...deck,
+          title,
+          description: desc,
+          lang
+        };
+        await db.updateDeck(updated);
+        this.activeDeck = updated;
+        closeModal();
+        if (this.currentView === 'deck-detail') {
+          this.renderDeckDetailView(updated);
+        } else {
+          this.renderDecksView();
+        }
+      } else {
+        await db.addDeck({
+          title,
+          description: desc,
+          color: '#007AFF',
+          lang
+        });
+        closeModal();
+        this.renderDecksView();
+      }
+    });
   }
 
   // --- 2. 牌組詳細頁 (Deck Detail & Card Manager) ---
@@ -174,14 +298,24 @@ class AnkiApp {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
             我的牌組
           </button>
-          <button id="btn-delete-deck" style="background: none; border: none; color: var(--color-again); font-size: 14px; cursor: pointer; padding: 4px;">
-            刪除牌組
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button id="btn-edit-deck" style="background: none; border: none; color: var(--accent-blue); font-size: 14px; font-weight: 500; cursor: pointer; padding: 4px 6px;">
+              編輯牌組
+            </button>
+            <button id="btn-delete-deck" style="background: none; border: none; color: var(--color-again); font-size: 14px; cursor: pointer; padding: 4px 6px;">
+              刪除牌組
+            </button>
+          </div>
         </div>
 
         <div style="margin-bottom: 20px;">
-          <h1 class="ios-large-title">${this.escapeHtml(deck.title)}</h1>
-          ${deck.description ? `<p style="color: var(--label-secondary); font-size: 14px; margin-top: -4px;">${this.escapeHtml(deck.description)}</p>` : ''}
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;">
+            <h1 class="ios-large-title" style="margin-bottom: 0;">${this.escapeHtml(deck.title)}</h1>
+            <span class="badge-lang-tag" style="font-size: 12px; padding: 3px 10px; border-radius: 10px;">
+              ${this.getDeckLangLabel(deck, cards)}
+            </span>
+          </div>
+          ${deck.description ? `<p style="color: var(--label-secondary); font-size: 14px; margin-top: 4px;">${this.escapeHtml(deck.description)}</p>` : ''}
         </div>
 
         <!-- 動作按鈕群 -->
@@ -239,6 +373,11 @@ class AnkiApp {
       this.renderCardEditor(null, 'deck-detail', { deck });
     });
 
+    document.getElementById('btn-edit-deck')?.addEventListener('click', () => {
+      triggerHaptic(15);
+      this.openDeckModal(deck);
+    });
+
     document.getElementById('btn-delete-deck')?.addEventListener('click', async () => {
       if (confirm(`確定要刪除「${deck.title}」及其所有卡片嗎？此動作無法復原！`)) {
         await db.deleteDeck(deck.id);
@@ -271,6 +410,9 @@ class AnkiApp {
     this.studyQueue = dueCards.length > 0 ? dueCards : cards;
     this.currentCardIndex = 0;
     this.sessionFinished = this.studyQueue.length === 0;
+
+    // 計算整副牌組推斷/設定之有效學習語言
+    this.effectiveLang = getEffectiveDeckLanguage(deck, cards);
 
     this.renderStudyCard();
   }
@@ -313,7 +455,10 @@ class AnkiApp {
           <button id="btn-exit-study" style="background: none; border: none; color: var(--accent-blue); font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0;">
             ← ${this.escapeHtml(this.activeDeck.title)}
           </button>
-          <div>進度: ${this.currentCardIndex + 1} / ${total}</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="badge-lang-tag" style="font-size: 11px;">${this.getLangDisplay(this.effectiveLang)}</span>
+            <div>進度: ${this.currentCardIndex + 1} / ${total}</div>
+          </div>
         </div>
         <div class="progress-container">
           <div class="progress-bar-fill" style="width: ${progress}%;"></div>
@@ -453,11 +598,21 @@ class AnkiApp {
     // 朗讀按鈕
     document.getElementById('btn-speak-front')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      speakText(card.front);
+      const targetLang = (this.effectiveLang && this.effectiveLang !== 'auto') ? this.effectiveLang : undefined;
+      speakText(card.front, targetLang);
     });
     document.getElementById('btn-speak-back')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      speakText(card.back);
+      // 背面優先獨立辨識 (例如含有中文漢字則以台灣微軟曉臻發音)
+      // 若背面為純外語且牌組已鎖定特定語系，則採用牌組語系
+      const backDetected = detectLanguage(card.back);
+      if (backDetected === 'zh-TW' || backDetected === 'ja-JP') {
+        speakText(card.back, backDetected);
+      } else if (this.effectiveLang && this.effectiveLang !== 'auto') {
+        speakText(card.back, this.effectiveLang);
+      } else {
+        speakText(card.back, backDetected);
+      }
     });
 
     // 評分按鈕群
