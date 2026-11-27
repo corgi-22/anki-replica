@@ -28,7 +28,7 @@ class AnkiApp {
     this.renderDecksView();
   }
 
-  // --- Google 雲端硬碟自動同步機制 (雙向增量智慧合併) ---
+  // --- Google 雲端硬碟自動同步機制 ---
   triggerAutoSync() {
     if (!gdrive.isLoggedIn()) return;
     const isAutoSync = localStorage.getItem('gdrive_auto_sync') !== 'false';
@@ -38,9 +38,9 @@ class AnkiApp {
     this._autoSyncTimer = setTimeout(async () => {
       try {
         await gdrive.syncTwoWay();
-        console.log('☁️ [Google Drive] 背景雙向智慧同步完成');
+        console.log('☁️ [Google Drive] 自動同步完成');
       } catch (e) {
-        console.warn('☁️ [Google Drive] 背景自動同步失敗:', e);
+        console.warn('☁️ [Google Drive] 自動同步失敗:', e);
       }
     }, 2500);
   }
@@ -871,8 +871,8 @@ class AnkiApp {
 
             <div class="ios-cell">
               <div>
-                <div style="font-weight: 600;">自動背景同步</div>
-                <div style="font-size: 12px; color: var(--label-secondary); margin-top: 2px;">新增卡片或複習完成後自動靜默備份</div>
+                <div style="font-weight: 600;">自動同步</div>
+                <div style="font-size: 12px; color: var(--label-secondary); margin-top: 2px;">新增卡片或複習完成後自動同步</div>
               </div>
               <label class="ios-switch">
                 <input type="checkbox" id="toggle-gdrive-autosync" ${isAutoSync ? 'checked' : ''} />
@@ -1047,7 +1047,7 @@ class AnkiApp {
       }
     });
 
-    // 自動背景同步開關
+    // 自動同步開關
     document.getElementById('toggle-gdrive-autosync')?.addEventListener('change', (e) => {
       localStorage.setItem('gdrive_auto_sync', e.target.checked ? 'true' : 'false');
       triggerHaptic(10);
