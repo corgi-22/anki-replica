@@ -1,6 +1,6 @@
 {
-  "name": "Anki Mobile - 間隔重複閃卡",
-  "short_name": "Anki",
+  "name": "Anki Replica",
+  "short_name": "Anki Replica",
   "description": "極簡純淨、符合 Apple HIG 行動端手勢操作的間隔重複學習工具",
   "start_url": "./index.html",
   "display": "standalone",
