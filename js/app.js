@@ -212,9 +212,6 @@ class AnkiApp {
                   <span class="pill-label">🇺🇸 英語 (en-US)</span>
                 </label>
               </div>
-              <div style="font-size: 11px; color: var(--label-secondary); margin-top: 8px; line-height: 1.4; padding-left: 2px;">
-                💡 <strong>智慧推斷</strong>：設為「自動偵測」時，若牌組內有任一張卡片含德語特徵 (ä/ö/ü/ß/der/die/das)，整副卡片正面發音將自動統一為德語！
-              </div>
             </div>
 
             <div style="margin-bottom: 8px;">
