@@ -865,16 +865,7 @@ class AnkiApp {
             <div style="padding: 14px 16px; border-bottom: 0.5px solid var(--separator);">
               <button id="btn-gdrive-sync" class="btn-pill" style="width: 100%; height: 48px; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-                立即雙向智慧同步
-              </button>
-              <div style="font-size: 12px; color: var(--label-secondary); text-align: center; margin-top: 8px; line-height: 1.4;">
-                自動比對本機與雲端最新進度，雙向增量合併，絕不遺失單字
-              </div>
-            </div>
-
-            <div style="padding: 8px 16px; border-bottom: 0.5px solid var(--separator); display: flex; justify-content: flex-end;">
-              <button id="btn-gdrive-download-replace" style="background: none; border: none; color: var(--label-secondary); font-size: 11px; cursor: pointer; text-decoration: underline;">
-                進階選項：自雲端單向覆蓋還原本機
+                立即同步
               </button>
             </div>
 
@@ -1008,10 +999,10 @@ class AnkiApp {
       try {
         await gdrive.signIn();
         triggerHaptic(20);
-        btn.textContent = '登入成功，正在執行雙向智慧同步...';
+        btn.textContent = '登入成功，正在執行同步...';
         try {
           const syncRes = await gdrive.syncTwoWay();
-          alert(`🎉 Google 帳號登入成功！已完成雙向智慧同步（共 ${syncRes.decksCount} 個牌組，${syncRes.cardsCount} 張卡片）。`);
+          alert(`🎉 Google 帳號登入成功！已完成同步（共 ${syncRes.decksCount} 個牌組，${syncRes.cardsCount} 張卡片）。`);
         } catch (syncErr) {
           console.warn('首次同步警告:', syncErr);
           alert('🎉 Google 帳號登入成功！已連結專屬雲端硬碟空間。');
@@ -1033,42 +1024,26 @@ class AnkiApp {
       }
     });
 
-    // 立即雙向智慧同步
+    // 立即同步
     document.getElementById('btn-gdrive-sync')?.addEventListener('click', async () => {
       triggerHaptic(15);
       const btn = document.getElementById('btn-gdrive-sync');
       const originalHtml = btn.innerHTML;
       btn.innerHTML = `
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="spin"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-        正在智慧同步中...
+        正在同步中...
       `;
       btn.disabled = true;
       try {
         const res = await gdrive.syncTwoWay();
         triggerHaptic(20);
-        alert(`🎉 雙向智慧同步成功！雲端與本機已完全一致（共 ${res.decksCount} 個牌組，${res.cardsCount} 張卡片）。`);
+        alert(`🎉 同步成功！雲端與本機已完全一致（共 ${res.decksCount} 個牌組，${res.cardsCount} 張卡片）。`);
         this.renderSettingsView();
       } catch (err) {
         console.error('同步失敗:', err);
         alert(`❌ 同步失敗: ${err.message}`);
         btn.innerHTML = originalHtml;
         btn.disabled = false;
-      }
-    });
-
-    // 進階選項：自雲端單向覆蓋還原
-    document.getElementById('btn-gdrive-download-replace')?.addEventListener('click', async () => {
-      triggerHaptic(15);
-      if (confirm('⚠️ 警告：這將會以雲端目前的備份完全覆蓋並取代本機現有資料。\n本機未同步的新增卡片將會被捨棄。\n\n確定要強制覆蓋還原嗎？')) {
-        try {
-          const res = await gdrive.downloadBackup('replace');
-          triggerHaptic(20);
-          alert(`🎉 覆蓋還原成功！已恢復 ${res.decksCount} 個牌組，${res.cardsCount} 張卡片。`);
-          this.renderSettingsView();
-        } catch (err) {
-          console.error('覆蓋還原失敗:', err);
-          alert(`❌ 還原失敗: ${err.message}`);
-        }
       }
     });
 
