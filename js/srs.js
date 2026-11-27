@@ -10,6 +10,8 @@ export const Rating = {
   EASY: 4   // 簡單
 };
 
+export const MAX_INTERVAL = 180; // 最大間隔天數天花板：180 天 (半年)
+
 /**
  * 取得當前日期的 YYYY-MM-DD 字串
  */
@@ -73,6 +75,8 @@ export function scheduleCard(card, rating) {
         interval = Math.round(interval * easeFactor * 1.3);
       }
     }
+    // 限制最大間隔天數天花板 (最多 180 天 / 半年)
+    interval = Math.min(MAX_INTERVAL, interval);
     repetitions++;
   }
 

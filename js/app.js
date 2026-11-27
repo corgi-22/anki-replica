@@ -5,7 +5,7 @@
  */
 
 import { db } from './db.js';
-import { scheduleCard, isCardDue, Rating } from './srs.js';
+import { scheduleCard, isCardDue, Rating, MAX_INTERVAL } from './srs.js';
 import { attachCardGestures } from './gestures.js';
 import { speakText, triggerHaptic, detectLanguage, getEffectiveDeckLanguage } from './tts.js';
 import { gdrive } from './gdrive.js';
@@ -555,15 +555,15 @@ class AnkiApp {
             </button>
             <button class="btn-rating btn-hard" data-rating="${Rating.HARD}">
               <span>困難</span>
-              <span class="sub-label">${Math.max(1, Math.round((card.interval || 1) * 1.2))}天</span>
+              <span class="sub-label">${Math.min(MAX_INTERVAL, Math.max(1, Math.round((card.interval || 1) * 1.2)))}天</span>
             </button>
             <button class="btn-rating btn-good" data-rating="${Rating.GOOD}">
               <span>良好</span>
-              <span class="sub-label">${card.repetitions === 0 ? 1 : Math.round((card.interval || 1) * (card.easeFactor || 2.5))}天</span>
+              <span class="sub-label">${Math.min(MAX_INTERVAL, card.repetitions === 0 ? 1 : Math.round((card.interval || 1) * (card.easeFactor || 2.5)))}天</span>
             </button>
             <button class="btn-rating btn-easy" data-rating="${Rating.EASY}">
               <span>簡單</span>
-              <span class="sub-label">${Math.round((card.interval || 2) * (card.easeFactor || 2.5) * 1.3)}天</span>
+              <span class="sub-label">${Math.min(MAX_INTERVAL, Math.round((card.interval || 2) * (card.easeFactor || 2.5) * 1.3))}天</span>
             </button>
           </div>
         </div>
