@@ -1,10 +1,26 @@
 /**
  * db.js - 原生 IndexedDB 封裝模組
- * 零依賴、純非同步，支援大容量本機儲存與一鍵 JSON 匯入/匯出備份
+ * 零依賴、純非同步，支援大容量本機儲存、UUID 雙向增量同步與智慧合併 (CRDT / Last-Write-Wins)
  */
 
 const DB_NAME = 'AppleAnkiLocalDB';
 const DB_VERSION = 2;
+
+/**
+ * 跨環境全相容 UUID v4 產生器
+ */
+export function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch (_) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 class Database {
   constructor() {
@@ -33,7 +49,7 @@ class Database {
           cardStore.createIndex('nextReview', 'nextReview', { unique: false });
         }
 
-        // 設定表
+        // 設定與同步狀態表 (儲存 tombstones、使用者偏好)
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
         }
@@ -47,6 +63,7 @@ class Database {
       request.onsuccess = async (event) => {
         this.db = event.target.result;
         await this.checkSeedData();
+        await this.ensureUuids();
         resolve(this.db);
       };
 
@@ -55,6 +72,54 @@ class Database {
         reject(event.target.error);
       };
     });
+  }
+
+  /**
+   * 平滑無損遷移：確保本機所有現存牌組與卡片皆具備全域唯一 UUID 與更新時間戳記
+   * 絕不清空、不重置、不遺失任何已存在單字與複習進度
+   */
+  async ensureUuids() {
+    if (!this.db) return;
+
+    const decks = await this.getAllDecks();
+    const idToDeckUuid = new Map();
+    const now = new Date().toISOString();
+
+    for (const deck of decks) {
+      let changed = false;
+      if (!deck.uuid) {
+        deck.uuid = generateUUID();
+        changed = true;
+      }
+      if (!deck.updatedAt) {
+        deck.updatedAt = deck.createdAt || now;
+        changed = true;
+      }
+      if (changed) {
+        await this.rawPutDeck(deck);
+      }
+      idToDeckUuid.set(deck.id, deck.uuid);
+    }
+
+    const cards = await this.getAllCards();
+    for (const card of cards) {
+      let changed = false;
+      if (!card.uuid) {
+        card.uuid = generateUUID();
+        changed = true;
+      }
+      if (!card.deckUuid && idToDeckUuid.has(card.deckId)) {
+        card.deckUuid = idToDeckUuid.get(card.deckId);
+        changed = true;
+      }
+      if (!card.updatedAt) {
+        card.updatedAt = card.lastReviewed ? `${card.lastReviewed}T00:00:00.000Z` : (card.createdAt || now);
+        changed = true;
+      }
+      if (changed) {
+        await this.rawPutCard(card);
+      }
+    }
   }
 
   async checkSeedData() {
@@ -136,15 +201,29 @@ class Database {
     });
   }
 
+  async getDeck(deckId) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('decks', 'readonly');
+      const store = tx.objectStore('decks');
+      const req = store.get(Number(deckId));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   async addDeck(deckData) {
     await this.init();
+    const now = new Date().toISOString();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('decks', 'readwrite');
       const store = tx.objectStore('decks');
       const req = store.add({
+        uuid: deckData.uuid || generateUUID(),
         lang: 'auto',
         ...deckData,
-        createdAt: new Date().toISOString()
+        createdAt: deckData.createdAt || now,
+        updatedAt: deckData.updatedAt || now
       });
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -153,6 +232,21 @@ class Database {
 
   async updateDeck(deckData) {
     await this.init();
+    const now = new Date().toISOString();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('decks', 'readwrite');
+      const store = tx.objectStore('decks');
+      const req = store.put({
+        uuid: deckData.uuid || generateUUID(),
+        ...deckData,
+        updatedAt: now
+      });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async rawPutDeck(deckData) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('decks', 'readwrite');
       const store = tx.objectStore('decks');
@@ -164,6 +258,23 @@ class Database {
 
   async deleteDeck(deckId) {
     await this.init();
+    const deck = await this.getDeck(deckId);
+    const cards = await this.getCardsByDeck(deckId);
+
+    // 寫入墓碑 (Tombstones)，確保同步至其他裝置時能正確同步刪除動作
+    if (deck?.uuid) {
+      await this.recordTombstone('decks', deck.uuid);
+    }
+    for (const card of cards) {
+      if (card.uuid) {
+        await this.recordTombstone('cards', card.uuid);
+      }
+    }
+
+    return this.rawDeleteDeck(deckId);
+  }
+
+  async rawDeleteDeck(deckId) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(['decks', 'cards'], 'readwrite');
       const deckStore = tx.objectStore('decks');
@@ -196,6 +307,17 @@ class Database {
     });
   }
 
+  async getCard(cardId) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('cards', 'readonly');
+      const store = tx.objectStore('cards');
+      const req = store.get(Number(cardId));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   async getAllCards() {
     await this.init();
     return new Promise((resolve, reject) => {
@@ -209,12 +331,22 @@ class Database {
 
   async addCard(cardData) {
     await this.init();
+    const now = new Date().toISOString();
+    let deckUuid = cardData.deckUuid;
+    if (!deckUuid && cardData.deckId) {
+      const deck = await this.getDeck(cardData.deckId);
+      if (deck?.uuid) deckUuid = deck.uuid;
+    }
+
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('cards', 'readwrite');
       const store = tx.objectStore('cards');
       const req = store.add({
+        uuid: cardData.uuid || generateUUID(),
+        deckUuid: deckUuid || '',
         ...cardData,
-        createdAt: new Date().toISOString()
+        createdAt: cardData.createdAt || now,
+        updatedAt: cardData.updatedAt || now
       });
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -223,10 +355,25 @@ class Database {
 
   async updateCard(card) {
     await this.init();
+    const now = new Date().toISOString();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('cards', 'readwrite');
       const store = tx.objectStore('cards');
-      const req = store.put(card);
+      const req = store.put({
+        uuid: card.uuid || generateUUID(),
+        ...card,
+        updatedAt: card.updatedAt || now
+      });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async rawPutCard(cardData) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('cards', 'readwrite');
+      const store = tx.objectStore('cards');
+      const req = store.put(cardData);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
@@ -234,6 +381,14 @@ class Database {
 
   async deleteCard(cardId) {
     await this.init();
+    const card = await this.getCard(cardId);
+    if (card?.uuid) {
+      await this.recordTombstone('cards', card.uuid);
+    }
+    return this.rawDeleteCard(cardId);
+  }
+
+  async rawDeleteCard(cardId) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('cards', 'readwrite');
       const store = tx.objectStore('cards');
@@ -243,7 +398,58 @@ class Database {
     });
   }
 
-  // --- 高品質語音快取操作 (支援離線播放與 0 延遲) ---
+  // --- Tombstones (刪除墓碑) 追蹤機制 ---
+  async getTombstones() {
+    await this.init();
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction('settings', 'readonly');
+        const store = tx.objectStore('settings');
+        const req = store.get('sync_tombstones');
+        req.onsuccess = () => {
+          const val = req.result?.value;
+          resolve({
+            decks: val?.decks || {},
+            cards: val?.cards || {}
+          });
+        };
+        req.onerror = () => resolve({ decks: {}, cards: {} });
+      } catch (_) {
+        resolve({ decks: {}, cards: {} });
+      }
+    });
+  }
+
+  async saveTombstones(tombstones) {
+    await this.init();
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction('settings', 'readwrite');
+        const store = tx.objectStore('settings');
+        const req = store.put({
+          key: 'sync_tombstones',
+          value: {
+            decks: tombstones.decks || {},
+            cards: tombstones.cards || {}
+          }
+        });
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+      } catch (_) {
+        resolve(false);
+      }
+    });
+  }
+
+  async recordTombstone(type, uuid) {
+    if (!uuid) return;
+    const tombstones = await this.getTombstones();
+    if (!tombstones[type]) tombstones[type] = {};
+    tombstones[type][uuid] = new Date().toISOString();
+    await this.saveTombstones(tombstones);
+  }
+
+  // --- 高品質語音快取操作 ---
   async getAudio(key) {
     await this.init();
     return new Promise((resolve) => {
@@ -304,18 +510,208 @@ class Database {
     });
   }
 
-  // --- JSON 匯出與匯入功能 (解決靜態網站無伺服器儲存) ---
-  async exportJSON() {
+  // --- 雙向智慧同步資料匯出與 Last-Write-Wins 合併 (Zero-Data-Loss CRDT) ---
+  async exportSyncData() {
+    await this.ensureUuids();
     const decks = await this.getAllDecks();
     const cards = await this.getAllCards();
-    const backupData = {
+    const tombstones = await this.getTombstones();
+
+    return {
       app: 'AppleAnkiReplica',
-      version: 1,
+      version: 3,
       exportedAt: new Date().toISOString(),
       decks,
-      cards
+      cards,
+      tombstones
     };
-    return JSON.stringify(backupData, null, 2);
+  }
+
+  /**
+   * 雙向增量智慧合併演算法 (Two-Way Incremental Merge with Tombstones)
+   * 規則：
+   * 1. 聯集兩端的刪除墓碑，確保已被刪除的卡片不會被舊備份復活
+   * 2. 牌組與卡片以 UUID 為唯一識別元；若有衝突，以 updatedAt 最新者獲勝 (Last-Write-Wins)
+   * 3. 雲端有的本機沒有 -> 寫入本機
+   * 4. 本機有的雲端沒有 -> 保留本機並納入輸出，絕不抹除
+   * 5. 兩端皆有的最新進度 -> 智慧更新本機
+   * 6. 回傳最終合併後完整資料集，供直接回寫至雲端，達成雙向 100% 一致性
+   */
+  async mergeSyncData(cloudPayload) {
+    if (!cloudPayload || typeof cloudPayload !== 'object') {
+      throw new Error('雲端同步資料格式錯誤');
+    }
+
+    await this.ensureUuids();
+
+    const localDecks = await this.getAllDecks();
+    const localCards = await this.getAllCards();
+    const localTombstones = await this.getTombstones();
+
+    // 1. 合併墓碑記錄
+    const mergedTombstones = {
+      decks: { ...(localTombstones.decks || {}) },
+      cards: { ...(localTombstones.cards || {}) }
+    };
+    const cloudDeckTombs = cloudPayload.tombstones?.decks || {};
+    for (const [uuid, time] of Object.entries(cloudDeckTombs)) {
+      if (!mergedTombstones.decks[uuid] || time > mergedTombstones.decks[uuid]) {
+        mergedTombstones.decks[uuid] = time;
+      }
+    }
+    const cloudCardTombs = cloudPayload.tombstones?.cards || {};
+    for (const [uuid, time] of Object.entries(cloudCardTombs)) {
+      if (!mergedTombstones.cards[uuid] || time > mergedTombstones.cards[uuid]) {
+        mergedTombstones.cards[uuid] = time;
+      }
+    }
+
+    // 2. 處理牌組合併
+    const localDeckByUuid = new Map(localDecks.map(d => [d.uuid, d]));
+    const localDeckByTitle = new Map(localDecks.map(d => [d.title, d]));
+    const rawCloudDecks = Array.isArray(cloudPayload.decks) ? cloudPayload.decks : [];
+
+    // 相容性處理：若雲端牌組缺少 UUID，嘗試用標題媒合或分配 UUID
+    const cloudDecks = rawCloudDecks.map(cd => {
+      let uuid = cd.uuid;
+      if (!uuid) {
+        if (localDeckByTitle.has(cd.title)) {
+          uuid = localDeckByTitle.get(cd.title).uuid;
+        } else {
+          uuid = generateUUID();
+        }
+      }
+      return {
+        ...cd,
+        uuid,
+        updatedAt: cd.updatedAt || cd.createdAt || new Date(0).toISOString()
+      };
+    });
+
+    const cloudDeckByUuid = new Map(cloudDecks.map(d => [d.uuid, d]));
+    const allDeckUuids = new Set([...localDeckByUuid.keys(), ...cloudDeckByUuid.keys()]);
+
+    for (const deckUuid of allDeckUuids) {
+      const delTime = mergedTombstones.decks[deckUuid];
+      const localD = localDeckByUuid.get(deckUuid);
+      const cloudD = cloudDeckByUuid.get(deckUuid);
+
+      if (delTime) {
+        const localTime = localD ? (localD.updatedAt || localD.createdAt || '') : '';
+        const cloudTime = cloudD ? (cloudD.updatedAt || cloudD.createdAt || '') : '';
+        if (delTime >= localTime && delTime >= cloudTime) {
+          // 已在其中一端刪除，且無更新的修改
+          if (localD) {
+            await this.rawDeleteDeck(localD.id);
+          }
+          continue;
+        }
+      }
+
+      // 未被刪除的牌組
+      if (localD && cloudD) {
+        const localTime = new Date(localD.updatedAt || localD.createdAt || 0).getTime();
+        const cloudTime = new Date(cloudD.updatedAt || cloudD.createdAt || 0).getTime();
+        if (cloudTime > localTime) {
+          // 雲端進度較新，更新本機設定，但保留本機既有流水號 id
+          await this.rawPutDeck({
+            ...localD,
+            ...cloudD,
+            id: localD.id
+          });
+        }
+      } else if (!localD && cloudD) {
+        // 雲端有，本機沒有 -> 寫入本機
+        const toAdd = { ...cloudD };
+        delete toAdd.id;
+        await this.addDeck(toAdd);
+      }
+      // 本機有，雲端沒有 -> 保留本機，稍後會透過 exportSyncData 回傳並上傳至雲端
+    }
+
+    // 重新取得本機最新牌組對照表 (供卡片 deckUuid 映射本地 deckId)
+    const freshDecks = await this.getAllDecks();
+    const deckUuidToLocalId = new Map(freshDecks.map(d => [d.uuid, d.id]));
+
+    // 3. 處理卡片合併
+    const localCardByUuid = new Map(localCards.map(c => [c.uuid, c]));
+    const rawCloudCards = Array.isArray(cloudPayload.cards) ? cloudPayload.cards : [];
+
+    // 相容性處理：若雲端卡片缺少 UUID 或 deckUuid
+    const cloudCards = rawCloudCards.map(cc => {
+      let uuid = cc.uuid;
+      if (!uuid) {
+        uuid = generateUUID();
+      }
+      return {
+        ...cc,
+        uuid,
+        updatedAt: cc.updatedAt || (cc.lastReviewed ? `${cc.lastReviewed}T00:00:00.000Z` : (cc.createdAt || new Date(0).toISOString()))
+      };
+    });
+
+    const cloudCardByUuid = new Map(cloudCards.map(c => [c.uuid, c]));
+    const allCardUuids = new Set([...localCardByUuid.keys(), ...cloudCardByUuid.keys()]);
+
+    for (const cardUuid of allCardUuids) {
+      const delTime = mergedTombstones.cards[cardUuid];
+      const localC = localCardByUuid.get(cardUuid);
+      const cloudC = cloudCardByUuid.get(cardUuid);
+      const targetDeckUuid = localC?.deckUuid || cloudC?.deckUuid;
+
+      // 檢查所屬牌組是否已被刪除
+      const isParentDeckDeleted = !targetDeckUuid || !deckUuidToLocalId.has(targetDeckUuid) || mergedTombstones.decks[targetDeckUuid];
+
+      if (delTime || isParentDeckDeleted) {
+        const localTime = localC ? (localC.updatedAt || localC.lastReviewed || '') : '';
+        const cloudTime = cloudC ? (cloudC.updatedAt || cloudC.lastReviewed || '') : '';
+        if (isParentDeckDeleted || (delTime >= localTime && delTime >= cloudTime)) {
+          if (localC) {
+            await this.rawDeleteCard(localC.id);
+          }
+          continue;
+        }
+      }
+
+      // 卡片處於正常有效狀態
+      if (localC && cloudC) {
+        const localTime = new Date(localC.updatedAt || localC.lastReviewed || 0).getTime();
+        const cloudTime = new Date(cloudC.updatedAt || cloudC.lastReviewed || 0).getTime();
+        if (cloudTime > localTime) {
+          // 雲端進度較新 (例如在其他裝置複習過或修改過題目/答案)
+          const targetLocalDeckId = deckUuidToLocalId.get(cloudC.deckUuid) || localC.deckId;
+          await this.rawPutCard({
+            ...localC,
+            ...cloudC,
+            id: localC.id,
+            deckId: targetLocalDeckId
+          });
+        }
+      } else if (!localC && cloudC) {
+        // 雲端有，本機沒有 -> 寫入本機
+        const targetLocalDeckId = deckUuidToLocalId.get(cloudC.deckUuid);
+        if (targetLocalDeckId) {
+          const toAdd = {
+            ...cloudC,
+            deckId: targetLocalDeckId
+          };
+          delete toAdd.id;
+          await this.addCard(toAdd);
+        }
+      }
+      // 本機有，雲端沒有 -> 保留本機，稍後自動整合並同步至雲端
+    }
+
+    // 4. 儲存最新合併後的墓碑記錄
+    await this.saveTombstones(mergedTombstones);
+
+    // 5. 產出 100% 整合後的完整資料集
+    return await this.exportSyncData();
+  }
+
+  // --- 本地 JSON 匯出與匯入功能 (單純檔案離線備份) ---
+  async exportJSON() {
+    return JSON.stringify(await this.exportSyncData(), null, 2);
   }
 
   async importJSON(jsonText, mode = 'merge') {
@@ -338,7 +734,17 @@ class Database {
         });
       }
 
-      // 匯入牌組與卡片（重新映射 ID 避免衝突）
+      if (mode === 'merge' && data.version >= 3) {
+        // 支援智慧增量合併
+        const merged = await this.mergeSyncData(data);
+        return {
+          success: true,
+          decksCount: merged.decks.length,
+          cardsCount: merged.cards.length
+        };
+      }
+
+      // 傳統匯入牌組與卡片（重新映射 ID 避免衝突）
       const idMap = new Map();
 
       for (const deck of data.decks) {
@@ -352,7 +758,6 @@ class Database {
       for (const card of data.cards) {
         const newCard = { ...card };
         delete newCard.id;
-        // 映射至新的牌組 ID
         if (idMap.has(card.deckId)) {
           newCard.deckId = idMap.get(card.deckId);
         }
@@ -373,9 +778,10 @@ class Database {
   async clearAll() {
     await this.init();
     return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(['decks', 'cards'], 'readwrite');
+      const tx = this.db.transaction(['decks', 'cards', 'settings'], 'readwrite');
       tx.objectStore('decks').clear();
       tx.objectStore('cards').clear();
+      tx.objectStore('settings').clear();
       tx.oncomplete = () => resolve(true);
       tx.onerror = () => reject(tx.error);
     });

@@ -28,7 +28,7 @@ class AnkiApp {
     this.renderDecksView();
   }
 
-  // --- Google 雲端硬碟自動同步機制 ---
+  // --- Google 雲端硬碟自動同步機制 (雙向增量智慧合併) ---
   triggerAutoSync() {
     if (!gdrive.isLoggedIn()) return;
     const isAutoSync = localStorage.getItem('gdrive_auto_sync') !== 'false';
@@ -37,8 +37,8 @@ class AnkiApp {
     clearTimeout(this._autoSyncTimer);
     this._autoSyncTimer = setTimeout(async () => {
       try {
-        await gdrive.uploadBackup();
-        console.log('☁️ [Google Drive] 背景自動同步完成');
+        await gdrive.syncTwoWay();
+        console.log('☁️ [Google Drive] 背景雙向智慧同步完成');
       } catch (e) {
         console.warn('☁️ [Google Drive] 背景自動同步失敗:', e);
       }
@@ -862,14 +862,19 @@ class AnkiApp {
               <span style="font-size: 12px; color: var(--color-good); font-weight: 600;">● 已連線</span>
             </div>
 
-            <div style="padding: 12px 16px; border-bottom: 0.5px solid var(--separator); display: flex; gap: 10px;">
-              <button id="btn-gdrive-upload" class="btn-pill" style="flex: 1; height: 44px; font-size: 13px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                立即備份至雲端
+            <div style="padding: 14px 16px; border-bottom: 0.5px solid var(--separator);">
+              <button id="btn-gdrive-sync" class="btn-pill" style="width: 100%; height: 48px; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                立即雙向智慧同步
               </button>
-              <button id="btn-gdrive-download" class="btn-pill btn-secondary" style="flex: 1; height: 44px; font-size: 13px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                從雲端還原下載
+              <div style="font-size: 12px; color: var(--label-secondary); text-align: center; margin-top: 8px; line-height: 1.4;">
+                自動比對本機與雲端最新進度，雙向增量合併，絕不遺失單字
+              </div>
+            </div>
+
+            <div style="padding: 8px 16px; border-bottom: 0.5px solid var(--separator); display: flex; justify-content: flex-end;">
+              <button id="btn-gdrive-download-replace" style="background: none; border: none; color: var(--label-secondary); font-size: 11px; cursor: pointer; text-decoration: underline;">
+                進階選項：自雲端單向覆蓋還原本機
               </button>
             </div>
 
@@ -1003,7 +1008,14 @@ class AnkiApp {
       try {
         await gdrive.signIn();
         triggerHaptic(20);
-        alert('🎉 Google 帳號登入成功！已連結專屬雲端硬碟空間。');
+        btn.textContent = '登入成功，正在執行雙向智慧同步...';
+        try {
+          const syncRes = await gdrive.syncTwoWay();
+          alert(`🎉 Google 帳號登入成功！已完成雙向智慧同步（共 ${syncRes.decksCount} 個牌組，${syncRes.cardsCount} 張卡片）。`);
+        } catch (syncErr) {
+          console.warn('首次同步警告:', syncErr);
+          alert('🎉 Google 帳號登入成功！已連結專屬雲端硬碟空間。');
+        }
         this.renderSettingsView();
       } catch (err) {
         console.error('Google 登入失敗:', err);
@@ -1021,46 +1033,42 @@ class AnkiApp {
       }
     });
 
-    // 立即備份至雲端
-    document.getElementById('btn-gdrive-upload')?.addEventListener('click', async () => {
+    // 立即雙向智慧同步
+    document.getElementById('btn-gdrive-sync')?.addEventListener('click', async () => {
       triggerHaptic(15);
-      const btn = document.getElementById('btn-gdrive-upload');
-      const originalText = btn.innerHTML;
-      btn.textContent = '正在備份...';
+      const btn = document.getElementById('btn-gdrive-sync');
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="spin"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+        正在智慧同步中...
+      `;
       btn.disabled = true;
       try {
-        await gdrive.uploadBackup();
+        const res = await gdrive.syncTwoWay();
         triggerHaptic(20);
-        alert('🎉 備份成功！已完整同步至你的 Google 雲端硬碟。');
+        alert(`🎉 雙向智慧同步成功！雲端與本機已完全一致（共 ${res.decksCount} 個牌組，${res.cardsCount} 張卡片）。`);
         this.renderSettingsView();
       } catch (err) {
-        console.error('上傳失敗:', err);
-        alert(`❌ 上傳失敗: ${err.message}`);
-        btn.innerHTML = originalText;
+        console.error('同步失敗:', err);
+        alert(`❌ 同步失敗: ${err.message}`);
+        btn.innerHTML = originalHtml;
         btn.disabled = false;
       }
     });
 
-    // 從雲端還原下載
-    document.getElementById('btn-gdrive-download')?.addEventListener('click', async () => {
+    // 進階選項：自雲端單向覆蓋還原
+    document.getElementById('btn-gdrive-download-replace')?.addEventListener('click', async () => {
       triggerHaptic(15);
-      const replace = confirm('選擇雲端資料還原方式：\n[確定]：清空現有本機資料，完全以雲端進度覆蓋還原\n[取消]：保留現有牌組，進行合併匯入');
-      const mode = replace ? 'replace' : 'merge';
-      const btn = document.getElementById('btn-gdrive-download');
-      const originalText = btn.innerHTML;
-      btn.textContent = '正在下載...';
-      btn.disabled = true;
-
-      try {
-        const res = await gdrive.downloadBackup(mode);
-        triggerHaptic(20);
-        alert(`🎉 還原成功！已成功同步 ${res.decksCount} 個牌組，${res.cardsCount} 張卡片。`);
-        this.renderSettingsView();
-      } catch (err) {
-        console.error('下載還原失敗:', err);
-        alert(`❌ 還原失敗: ${err.message}`);
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+      if (confirm('⚠️ 警告：這將會以雲端目前的備份完全覆蓋並取代本機現有資料。\n本機未同步的新增卡片將會被捨棄。\n\n確定要強制覆蓋還原嗎？')) {
+        try {
+          const res = await gdrive.downloadBackup('replace');
+          triggerHaptic(20);
+          alert(`🎉 覆蓋還原成功！已恢復 ${res.decksCount} 個牌組，${res.cardsCount} 張卡片。`);
+          this.renderSettingsView();
+        } catch (err) {
+          console.error('覆蓋還原失敗:', err);
+          alert(`❌ 還原失敗: ${err.message}`);
+        }
       }
     });
 

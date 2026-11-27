@@ -89,6 +89,7 @@ export function scheduleCard(card, rating) {
     easeFactor: Number(easeFactor.toFixed(2)),
     nextReview,
     lastReviewed: today,
+    updatedAt: new Date().toISOString(),
     lapses: rating === Rating.AGAIN ? (card.lapses || 0) + 1 : (card.lapses || 0)
   };
 }

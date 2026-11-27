@@ -180,13 +180,10 @@ class GDriveSync {
   }
 
   /**
-   * 上傳/同步本地資料庫至 Google Drive AppData
+   * 將 JSON 資料封包透過 Multipart 協定上傳至 Google Drive AppData
    */
-  async uploadBackup() {
+  async _uploadJsonToDrive(payloadStr, existingFile = null) {
     const token = await this.ensureValidToken();
-    const jsonStr = await db.exportJSON();
-    const existingFile = await this.findBackupFile();
-
     const metadata = {
       name: BACKUP_FILENAME,
       mimeType: 'application/json'
@@ -196,7 +193,6 @@ class GDriveSync {
       metadata.parents = ['appDataFolder'];
     }
 
-    // Google Drive Multipart 格式
     const boundary = '-------314159265358979323846';
     const delimiter = `\r\n--${boundary}\r\n`;
     const closeDelimiter = `\r\n--${boundary}--`;
@@ -207,7 +203,7 @@ class GDriveSync {
       JSON.stringify(metadata) +
       delimiter +
       'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-      jsonStr +
+      payloadStr +
       closeDelimiter;
 
     let uploadUrl;
@@ -235,16 +231,79 @@ class GDriveSync {
       throw new Error(`上傳至 Google Drive 失敗: HTTP ${res.status} (${errText})`);
     }
 
-    const result = await res.json();
+    return await res.json();
+  }
+
+  /**
+   * 業界標準：雙向增量智慧同步 (Two-Way Incremental Sync)
+   * 1. 自雲端 AppData 讀取最新進度
+   * 2. 本機與雲端進行 Last-Write-Wins 與墓碑合併 (合約保證：單字絕不無故消失)
+   * 3. 將合併後的最新完整狀態回寫雲端
+   * 4. 兩端進度達成 100% 同步
+   */
+  async syncTwoWay() {
+    const token = await this.ensureValidToken();
+    const existingFile = await this.findBackupFile();
+
+    let finalPayload;
+
+    if (existingFile) {
+      // 雲端已有備份檔：下載並進行雙向增量合併
+      const url = `https://www.googleapis.com/drive/v3/files/${existingFile.id}?alt=media`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        throw new Error(`讀取雲端備份失敗: HTTP ${res.status}`);
+      }
+
+      const cloudJsonText = await res.text();
+      let cloudData;
+      try {
+        cloudData = JSON.parse(cloudJsonText);
+      } catch (e) {
+        throw new Error('雲端備份檔案格式毀損，無法解析 JSON');
+      }
+
+      // 執行無損雙向智慧合併
+      finalPayload = await db.mergeSyncData(cloudData);
+
+      // 將合併後的最終狀態回寫至雲端
+      await this._uploadJsonToDrive(JSON.stringify(finalPayload, null, 2), existingFile);
+    } else {
+      // 雲端尚無備份檔：首次建立雲端檔案
+      await db.ensureUuids();
+      finalPayload = await db.exportSyncData();
+      await this._uploadJsonToDrive(JSON.stringify(finalPayload, null, 2), null);
+    }
+
     const now = new Date().toISOString();
     localStorage.setItem('gdrive_last_sync_time', now);
-    return { success: true, fileId: result.id, syncTime: now };
+
+    return {
+      success: true,
+      decksCount: finalPayload.decks.length,
+      cardsCount: finalPayload.cards.length,
+      syncTime: now
+    };
+  }
+
+  /**
+   * 上傳/同步本地資料庫至 Google Drive AppData (自動走安全雙向合併)
+   */
+  async uploadBackup() {
+    return await this.syncTwoWay();
   }
 
   /**
    * 從 Google Drive AppData 下載備份並還原至本機 IndexedDB
    */
   async downloadBackup(mode = 'replace') {
+    if (mode === 'merge' || mode === 'sync') {
+      return await this.syncTwoWay();
+    }
+
     const token = await this.ensureValidToken();
     const existingFile = await this.findBackupFile();
 
