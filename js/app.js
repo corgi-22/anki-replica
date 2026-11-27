@@ -8,6 +8,7 @@ import { db } from './db.js';
 import { scheduleCard, isCardDue, Rating } from './srs.js';
 import { attachCardGestures } from './gestures.js';
 import { speakText, triggerHaptic, detectLanguage, getEffectiveDeckLanguage } from './tts.js';
+import { gdrive } from './gdrive.js';
 
 class AnkiApp {
   constructor() {
@@ -25,6 +26,23 @@ class AnkiApp {
     this.bindEvents();
     this.loadTheme();
     this.renderDecksView();
+  }
+
+  // --- Google 雲端硬碟自動同步機制 ---
+  triggerAutoSync() {
+    if (!gdrive.isLoggedIn()) return;
+    const isAutoSync = localStorage.getItem('gdrive_auto_sync') !== 'false';
+    if (!isAutoSync) return;
+
+    clearTimeout(this._autoSyncTimer);
+    this._autoSyncTimer = setTimeout(async () => {
+      try {
+        await gdrive.uploadBackup();
+        console.log('☁️ [Google Drive] 背景自動同步完成');
+      } catch (e) {
+        console.warn('☁️ [Google Drive] 背景自動同步失敗:', e);
+      }
+    }, 2500);
   }
 
   // --- 視圖路由切換 ---
@@ -258,6 +276,7 @@ class AnkiApp {
         await db.updateDeck(updated);
         this.activeDeck = updated;
         closeModal();
+        this.triggerAutoSync();
         if (this.currentView === 'deck-detail') {
           this.renderDeckDetailView(updated);
         } else {
@@ -271,6 +290,7 @@ class AnkiApp {
           lang
         });
         closeModal();
+        this.triggerAutoSync();
         this.renderDecksView();
       }
     });
@@ -379,6 +399,7 @@ class AnkiApp {
       if (confirm(`確定要刪除「${deck.title}」及其所有卡片嗎？此動作無法復原！`)) {
         await db.deleteDeck(deck.id);
         triggerHaptic(20);
+        this.triggerAutoSync();
         alert('牌組已刪除。');
         this.switchView('decks');
       }
@@ -613,6 +634,7 @@ class AnkiApp {
 
     // 持久化到 IndexedDB
     await db.updateCard(updatedCard);
+    this.triggerAutoSync();
 
     // 若評為重來 (Again)，將該卡片在稍後重新推入今日複習隊列末端 (模擬 Anki Learning Step)
     if (rating === Rating.AGAIN) {
@@ -707,6 +729,7 @@ class AnkiApp {
               this.currentCardIndex = Math.max(0, this.studyQueue.length - 1);
             }
           }
+          this.triggerAutoSync();
           alert('卡片已刪除。');
           this.returnToPreviousView(returnView, context);
         }
@@ -742,6 +765,7 @@ class AnkiApp {
         }
 
         triggerHaptic(20);
+        this.triggerAutoSync();
         alert('✅ 卡片修改已儲存！');
         this.returnToPreviousView(returnView, context);
       } else {
@@ -757,6 +781,7 @@ class AnkiApp {
         });
 
         triggerHaptic(20);
+        this.triggerAutoSync();
         alert('✅ 卡片已成功新增！');
         document.getElementById('card-front').value = '';
         document.getElementById('card-back').value = '';
@@ -787,6 +812,11 @@ class AnkiApp {
     const savedWorkerUrl = localStorage.getItem('tts-worker-url') || '';
     const savedEngine = localStorage.getItem('tts-engine') || 'edge';
 
+    const isGDriveLoggedIn = gdrive.isLoggedIn();
+    const gdriveUser = gdrive.getUser();
+    const lastSyncTimeStr = gdrive.getLastSyncTime();
+    const isAutoSync = localStorage.getItem('gdrive_auto_sync') !== 'false';
+
     const main = document.getElementById('app-main');
 
     main.innerHTML = `
@@ -795,6 +825,66 @@ class AnkiApp {
         <p style="color: var(--label-secondary); font-size: 14px; margin-bottom: 20px;">
           個人化系統偏好、資料備份與語音設定。
         </p>
+
+        <!-- Google 雲端硬碟同步區塊 -->
+        <div class="ios-group-title">☁️ Google 雲端硬碟同步</div>
+        <div class="ios-group-card">
+          ${!isGDriveLoggedIn ? `
+            <div style="padding: 18px 16px;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <svg width="24" height="24" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/></svg>
+                <div style="font-weight: 600; font-size: 16px;">連結 Google 帳號備份</div>
+              </div>
+              <p style="font-size: 13px; color: var(--label-secondary); margin-bottom: 14px; line-height: 1.45;">
+                登入你的 Google 帳號，可將所有牌組與間隔複習進度同步至個人雲端硬碟的 AppData 專屬隱私空間，跨裝置無縫接軌。
+              </p>
+              <button id="btn-gdrive-login" class="btn-pill" style="width: 100%; height: 48px; background-color: #4285F4; font-size: 15px; font-weight: 600; color: #fff;">
+                使用 Google 帳號登入
+              </button>
+            </div>
+          ` : `
+            <div class="ios-cell">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                ${gdriveUser?.picture ? `<img src="${this.escapeHtml(gdriveUser.picture)}" style="width: 36px; height: 36px; border-radius: 50%;" />` : `<div style="width: 36px; height: 36px; border-radius: 50%; background: #4285F4; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700;">G</div>`}
+                <div>
+                  <div style="font-weight: 600; font-size: 15px;">${this.escapeHtml(gdriveUser?.name || 'Google 使用者')}</div>
+                  <div style="font-size: 12px; color: var(--label-secondary);">${this.escapeHtml(gdriveUser?.email || '')}</div>
+                </div>
+              </div>
+              <button id="btn-gdrive-logout" style="background: none; border: none; color: var(--color-again); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px 6px;">登出</button>
+            </div>
+
+            <div class="ios-cell">
+              <div>
+                <div style="font-weight: 600;">上次雲端同步</div>
+                <div style="font-size: 12px; color: var(--label-secondary); margin-top: 2px;">${lastSyncTimeStr ? `最後更新：${lastSyncTimeStr}` : '尚未備份至雲端'}</div>
+              </div>
+              <span style="font-size: 12px; color: var(--color-good); font-weight: 600;">● 已連線</span>
+            </div>
+
+            <div style="padding: 12px 16px; border-bottom: 0.5px solid var(--separator); display: flex; gap: 10px;">
+              <button id="btn-gdrive-upload" class="btn-pill" style="flex: 1; height: 44px; font-size: 13px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                立即備份至雲端
+              </button>
+              <button id="btn-gdrive-download" class="btn-pill btn-secondary" style="flex: 1; height: 44px; font-size: 13px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                從雲端還原下載
+              </button>
+            </div>
+
+            <div class="ios-cell">
+              <div>
+                <div style="font-weight: 600;">自動背景同步</div>
+                <div style="font-size: 12px; color: var(--label-secondary); margin-top: 2px;">新增卡片或複習完成後自動靜默備份</div>
+              </div>
+              <label class="ios-switch">
+                <input type="checkbox" id="toggle-gdrive-autosync" ${isAutoSync ? 'checked' : ''} />
+                <span class="ios-switch-slider"></span>
+              </label>
+            </div>
+          `}
+        </div>
 
         <!-- 高品質語音引擎區塊 (方案 1: Cloudflare Edge TTS) -->
         <div class="ios-group-title">🎙️ 語音設定</div>
@@ -903,6 +993,82 @@ class AnkiApp {
         </div>
       </div>
     `;
+
+    // Google Drive 登入
+    document.getElementById('btn-gdrive-login')?.addEventListener('click', async () => {
+      triggerHaptic(15);
+      const btn = document.getElementById('btn-gdrive-login');
+      btn.textContent = '正在啟動 Google 授權視窗...';
+      btn.disabled = true;
+      try {
+        await gdrive.signIn();
+        triggerHaptic(20);
+        alert('🎉 Google 帳號登入成功！已連結專屬雲端硬碟空間。');
+        this.renderSettingsView();
+      } catch (err) {
+        console.error('Google 登入失敗:', err);
+        alert(`❌ 登入失敗或已取消: ${err.message}`);
+        this.renderSettingsView();
+      }
+    });
+
+    // Google Drive 登出
+    document.getElementById('btn-gdrive-logout')?.addEventListener('click', () => {
+      if (confirm('確定要登出 Google 帳號嗎？（本機資料依然會完整保留）')) {
+        triggerHaptic(15);
+        gdrive.signOut();
+        this.renderSettingsView();
+      }
+    });
+
+    // 立即備份至雲端
+    document.getElementById('btn-gdrive-upload')?.addEventListener('click', async () => {
+      triggerHaptic(15);
+      const btn = document.getElementById('btn-gdrive-upload');
+      const originalText = btn.innerHTML;
+      btn.textContent = '正在備份...';
+      btn.disabled = true;
+      try {
+        await gdrive.uploadBackup();
+        triggerHaptic(20);
+        alert('🎉 備份成功！已完整同步至你的 Google 雲端硬碟。');
+        this.renderSettingsView();
+      } catch (err) {
+        console.error('上傳失敗:', err);
+        alert(`❌ 上傳失敗: ${err.message}`);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
+    });
+
+    // 從雲端還原下載
+    document.getElementById('btn-gdrive-download')?.addEventListener('click', async () => {
+      triggerHaptic(15);
+      const replace = confirm('選擇雲端資料還原方式：\n[確定]：清空現有本機資料，完全以雲端進度覆蓋還原\n[取消]：保留現有牌組，進行合併匯入');
+      const mode = replace ? 'replace' : 'merge';
+      const btn = document.getElementById('btn-gdrive-download');
+      const originalText = btn.innerHTML;
+      btn.textContent = '正在下載...';
+      btn.disabled = true;
+
+      try {
+        const res = await gdrive.downloadBackup(mode);
+        triggerHaptic(20);
+        alert(`🎉 還原成功！已成功同步 ${res.decksCount} 個牌組，${res.cardsCount} 張卡片。`);
+        this.renderSettingsView();
+      } catch (err) {
+        console.error('下載還原失敗:', err);
+        alert(`❌ 還原失敗: ${err.message}`);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
+    });
+
+    // 自動背景同步開關
+    document.getElementById('toggle-gdrive-autosync')?.addEventListener('change', (e) => {
+      localStorage.setItem('gdrive_auto_sync', e.target.checked ? 'true' : 'false');
+      triggerHaptic(10);
+    });
 
     // 語音設定監聽
     const workerUrlInput = document.getElementById('input-worker-url');
