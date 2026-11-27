@@ -603,16 +603,8 @@ class AnkiApp {
     });
     document.getElementById('btn-speak-back')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      // 背面優先獨立辨識 (例如含有中文漢字則以台灣微軟曉臻發音)
-      // 若背面為純外語且牌組已鎖定特定語系，則採用牌組語系
-      const backDetected = detectLanguage(card.back);
-      if (backDetected === 'zh-TW' || backDetected === 'ja-JP') {
-        speakText(card.back, backDetected);
-      } else if (this.effectiveLang && this.effectiveLang !== 'auto') {
-        speakText(card.back, this.effectiveLang);
-      } else {
-        speakText(card.back, backDetected);
-      }
+      // 卡片背面 100% 獨立依內容判斷 (背面若是英文就用英文發音、中文就用中文、日文就用日文，不受正面牌組語言綁定)
+      speakText(card.back);
     });
 
     // 評分按鈕群
