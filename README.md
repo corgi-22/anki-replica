@@ -40,7 +40,7 @@ Anki Replica 是一個基於 Web 技術實現的行動端間隔重複記憶閃�
   * 微軟 Edge TTS（透過 Cloudflare Worker 代理）。
   * 原生 Web Speech API（離線或未設定 Worker 時自動降級備援）。
 * **語言支援**：
-  * 支援德語 (`de-DE`)、繁體中文 (`zh-TW`)、日語 (`ja-JP`)、英語 (`en-US`)。
+  * 支援德語 (`de-DE`)、繁體中文 (`zh-TW`)、日語 (`ja-JP`)、英語 (`en-US`)、印尼語 (`id-ID`)、越南語 (`vi-VN`)。
   * 支援牌組指定語言或由系統自動推斷。
   * 正面與背面卡片獨立推斷發音語言。
 * **格式解析**：

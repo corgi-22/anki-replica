@@ -23,7 +23,9 @@ const DEFAULT_VOICES = {
   'de-DE': 'de-DE-KatjaNeural',      // 德語母語女聲（標準高地德語，廣播級）
   'zh-TW': 'zh-TW-HsiaoChenNeural',  // 台灣繁體中文（曉臻，自然溫和）
   'ja-JP': 'ja-JP-NanamiNeural',     // 日語女聲（七海，音調高低音準確）
-  'en-US': 'en-US-JennyNeural'       // 美式英語女聲
+  'en-US': 'en-US-JennyNeural',      // 美式英語女聲
+  'id-ID': 'id-ID-GadisNeural',      // 印尼語女聲（Gadis，雅加達標準音）
+  'vi-VN': 'vi-VN-HoaiMyNeural'      // 越南語女聲（HoaiMy，河內標準聲調音）
 };
 
 function getCorsHeaders(allowedOrigin) {

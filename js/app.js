@@ -171,10 +171,13 @@ class AnkiApp {
     if (lang === 'de-DE') return '🇩🇪 德語';
     if (lang === 'ja-JP') return '🇯🇵 日語';
     if (lang === 'en-US') return '🇺🇸 英語';
+    if (lang === 'id-ID') return '🇮🇩 印尼語';
+    if (lang === 'vi-VN') return '🇻🇳 越南語';
 
     const inferred = getEffectiveDeckLanguage(deck, cards);
     if (inferred === 'de-DE') return '🇩🇪 德語 (自動)';
     if (inferred === 'ja-JP') return '🇯🇵 日語 (自動)';
+    if (inferred === 'vi-VN') return '🇻🇳 越南語 (自動)';
     return '🌐 自動偵測';
   }
 
@@ -183,6 +186,8 @@ class AnkiApp {
       'de-DE': '🇩🇪 德語',
       'ja-JP': '🇯🇵 日語',
       'en-US': '🇺🇸 英語',
+      'id-ID': '🇮🇩 印尼語',
+      'vi-VN': '🇻🇳 越南語',
       'auto': '🌐 自動'
     };
     return map[langCode] || '🌐 自動';
@@ -228,6 +233,14 @@ class AnkiApp {
                 <label class="lang-option-pill">
                   <input type="radio" name="modal-deck-lang" value="en-US" ${currentLang === 'en-US' ? 'checked' : ''} />
                   <span class="pill-label">🇺🇸 英語 (en-US)</span>
+                </label>
+                <label class="lang-option-pill">
+                  <input type="radio" name="modal-deck-lang" value="id-ID" ${currentLang === 'id-ID' ? 'checked' : ''} />
+                  <span class="pill-label">🇮🇩 印尼語 (id-ID)</span>
+                </label>
+                <label class="lang-option-pill">
+                  <input type="radio" name="modal-deck-lang" value="vi-VN" ${currentLang === 'vi-VN' ? 'checked' : ''} />
+                  <span class="pill-label">🇻🇳 越南語 (vi-VN)</span>
                 </label>
               </div>
             </div>
@@ -888,7 +901,7 @@ class AnkiApp {
           <div class="ios-cell">
             <div>
               <div style="font-weight: 600;">發音引擎</div>
-              <div style="font-size: 12px; color: var(--label-secondary);">微軟母語神經網路 (德語Katja/繁中曉臻/日語七海)</div>
+              <div style="font-size: 12px; color: var(--label-secondary);">微軟母語神經網路 (德/中/日/英/印尼/越南)</div>
             </div>
             <select id="tts-engine-select" class="ios-input" style="width: auto; padding: 6px 12px; font-size: 13px;">
               <option value="edge" ${savedEngine === 'edge' ? 'selected' : ''}>微軟神經網路 (推薦)</option>
@@ -911,6 +924,8 @@ class AnkiApp {
               <button id="btn-test-de" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇩🇪 測試德語</button>
               <button id="btn-test-zh" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇹🇼 測試繁中</button>
               <button id="btn-test-ja" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇯🇵 測試日語</button>
+              <button id="btn-test-id" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇮🇩 測試印尼語</button>
+              <button id="btn-test-vi" class="btn-pill btn-secondary" style="padding: 6px 12px; font-size: 12px;">🇻🇳 測試越南語</button>
             </div>
           </div>
 
@@ -1073,6 +1088,12 @@ class AnkiApp {
     });
     document.getElementById('btn-test-ja')?.addEventListener('click', () => {
       speakText('こんにちは！今日も楽しく勉強しましょう。', 'ja-JP');
+    });
+    document.getElementById('btn-test-id')?.addEventListener('click', () => {
+      speakText('Halo! Selamat pagi, apa kabar?', 'id-ID');
+    });
+    document.getElementById('btn-test-vi')?.addEventListener('click', () => {
+      speakText('Xin chào! Rất vui được gặp bạn.', 'vi-VN');
     });
 
     // 清空語音快取

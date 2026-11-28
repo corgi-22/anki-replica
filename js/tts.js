@@ -22,7 +22,9 @@ export const EDGE_VOICES = {
   'de-DE': 'de-DE-KatjaNeural',      // 德語母語女聲 (廣播級)
   'zh-TW': 'zh-TW-HsiaoChenNeural',  // 台灣繁中 (曉臻，自然柔和)
   'ja-JP': 'ja-JP-NanamiNeural',     // 日語女聲 (七海，音調高低音準確)
-  'en-US': 'en-US-JennyNeural'       // 美式英語
+  'en-US': 'en-US-JennyNeural',      // 美式英語
+  'id-ID': 'id-ID-GadisNeural',      // 印尼語女聲 (Gadis，標準音)
+  'vi-VN': 'vi-VN-HoaiMyNeural'      // 越南語女聲 (HoaiMy，河內標準聲調音)
 };
 
 /**
@@ -44,11 +46,20 @@ export function isJapaneseText(text) {
 }
 
 /**
+ * 檢查文字是否具有越南語顯著特徵（聲調符號、角符號、đ/Đ）
+ */
+export function isVietnameseText(text) {
+  if (!text) return false;
+  return /[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵĐ]/i.test(text);
+}
+
+/**
  * 智慧推斷牌組的有效朗讀語言
- * 1. 若牌組手動指定 (de-DE, ja-JP, en-US)，直接使用該語言
+ * 1. 若牌組手動指定 (de-DE, ja-JP, en-US, id-ID, vi-VN)，直接使用該語言
  * 2. 若牌組設為 'auto' (或舊牌組未設)：
  *    掃描牌組內卡片正面，若有任一張含有德語特徵，整副牌組推斷為德語 (de-DE)；
  *    若有任一張含有日語假名，整副牌組推斷為日語 (ja-JP)；
+ *    若有任一張含有越南語聲調特徵，整副牌組推斷為越南語 (vi-VN)；
  *    否則回傳 'auto'
  */
 export function getEffectiveDeckLanguage(deck, cards = []) {
@@ -62,13 +73,16 @@ export function getEffectiveDeckLanguage(deck, cards = []) {
 
     const hasJapaneseCard = cards.some(c => isJapaneseText(c.front));
     if (hasJapaneseCard) return 'ja-JP';
+
+    const hasVietnameseCard = cards.some(c => isVietnameseText(c.front));
+    if (hasVietnameseCard) return 'vi-VN';
   }
 
   return 'auto';
 }
 
 /**
- * 自動判斷字串語言（德文、日文、繁中、英文）
+ * 自動判斷字串語言（日文、越南文、德文、繁中、英文）
  */
 export function detectLanguage(text) {
   if (!text) return 'en-US';
@@ -76,15 +90,18 @@ export function detectLanguage(text) {
   // 1. 日文：包含平假名或片假名
   if (isJapaneseText(text)) return 'ja-JP';
 
-  // 2. 德文：專有變音字符 (ä, ö, ü, ß) 或常見冠詞詞彙
+  // 2. 越南文：包含專屬聲調或變音字符
+  if (isVietnameseText(text)) return 'vi-VN';
+
+  // 3. 德文：專有變音字符 (ä, ö, ü, ß) 或常見冠詞詞彙
   if (isGermanText(text)) return 'de-DE';
 
-  // 3. 繁體/通用中文：只要包含漢字 (且非日文)，優先判定為中文 (即使含有少量英文或詞性註記)
+  // 4. 繁體/通用中文：只要包含漢字 (且非日文)，優先判定為中文 (即使含有少量英文或詞性註記)
   if (/[\u4E00-\u9FFF]/.test(text)) {
     return 'zh-TW';
   }
 
-  // 4. 拉丁字母預設：英文
+  // 5. 拉丁字母預設：英文
   return 'en-US';
 }
 
